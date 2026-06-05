@@ -28,13 +28,17 @@ prompt() {
     local secret="${4:-false}"
     local value=""
 
+    # secret 模式：允许留空，由调用方自动生成
+    if [[ "$secret" == "true" ]]; then
+        read -r -s -p "${message} [回车自动生成]: " value
+        echo ""
+        value="${value:-$default}"
+        printf -v "$var_name" '%s' "$value"
+        return
+    fi
+
     if [[ -n "${default}" ]]; then
-        if [[ "$secret" == "true" ]]; then
-            read -r -s -p "${message} [回车自动生成]: " value
-            echo ""
-        else
-            read -r -p "${message} [${default}]: " value
-        fi
+        read -r -p "${message} [${default}]: " value
         value="${value:-$default}"
     else
         while [[ -z "${value:-}" ]]; do
