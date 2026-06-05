@@ -9,6 +9,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=deploy/lib/detect-infra.sh
 source "$SCRIPT_DIR/lib/detect-infra.sh"
+# shellcheck source=deploy/lib/nginx-cert.sh
+source "$SCRIPT_DIR/lib/nginx-cert.sh"
 
 write_env_file() {
     local env_file="$PROJECT_ROOT/.env"
@@ -118,6 +120,11 @@ configure_postgres() {
             POSTGRES_PASSWORD="${PG_PASSWORD}"
             POSTGRES_CONNECTION="Host=${PG_HOST};Port=${PG_PORT};Database=${PG_DATABASE};Username=${PG_USERNAME};Password=${PG_PASSWORD}"
             ok "将连接外部 PostgreSQL"
+            echo ""
+            warn "请先在已有 PostgreSQL 中创建库和用户（否则 API 会一直起不来）:"
+            echo "  CREATE DATABASE ${PG_DATABASE};"
+            echo "  CREATE USER ${PG_USERNAME} WITH PASSWORD '你的密码';"
+            echo "  GRANT ALL PRIVILEGES ON DATABASE ${PG_DATABASE} TO ${PG_USERNAME};"
             return
         fi
     else
@@ -136,6 +143,11 @@ configure_postgres() {
             POSTGRES_PASSWORD="${PG_PASSWORD}"
             POSTGRES_CONNECTION="Host=${PG_HOST};Port=${PG_PORT};Database=${PG_DATABASE};Username=${PG_USERNAME};Password=${PG_PASSWORD}"
             ok "将连接外部 PostgreSQL"
+            echo ""
+            warn "请先在已有 PostgreSQL 中创建库和用户（否则 API 会一直起不来）:"
+            echo "  CREATE DATABASE ${PG_DATABASE};"
+            echo "  CREATE USER ${PG_USERNAME} WITH PASSWORD '你的密码';"
+            echo "  GRANT ALL PRIVILEGES ON DATABASE ${PG_DATABASE} TO ${PG_USERNAME};"
             return
         fi
     fi
@@ -171,7 +183,12 @@ run_configure_env_interactive() {
     echo ""
 
     prompt API_DOMAIN "API 域名（如 api.example.com）" ""
-    prompt CERTBOT_EMAIL "Certbot 邮箱（HTTPS 证书到期提醒）" ""
+    CERTBOT_EMAIL=""
+    if letsencrypt_cert_exists "$API_DOMAIN"; then
+        ok "检测到已有 HTTPS 证书 (/etc/letsencrypt/live/${API_DOMAIN}/)，将直接复用，无需填写邮箱"
+    else
+        prompt CERTBOT_EMAIL "Certbot 邮箱（HTTPS 证书到期提醒）" ""
+    fi
     NGINX_SITE_NAME="websearch"
 
     step "确认配置"
@@ -184,7 +201,11 @@ run_configure_env_interactive() {
     echo "  搜索缓存 TTL:      ${CACHE_SEARCH_TTL}s"
     echo "  抓取缓存 TTL:      ${CACHE_SCRAPE_TTL}s"
     echo "  API 域名:          https://${API_DOMAIN}"
-    echo "  Certbot 邮箱:      ${CERTBOT_EMAIL}"
+    if letsencrypt_cert_exists "$API_DOMAIN"; then
+        echo "  HTTPS 证书:        复用已有"
+    else
+        echo "  Certbot 邮箱:      ${CERTBOT_EMAIL}"
+    fi
     echo ""
 
     if ! prompt_yn "确认写入 .env 并开始部署?" "y"; then
@@ -198,7 +219,10 @@ run_configure_env_interactive() {
 
 run_configure_env_from_env() {
     : "${API_DOMAIN:?API_DOMAIN required}"
-    : "${CERTBOT_EMAIL:?CERTBOT_EMAIL required}"
+    if ! letsencrypt_cert_exists "${API_DOMAIN}"; then
+        : "${CERTBOT_EMAIL:?CERTBOT_EMAIL required when no existing certificate for API_DOMAIN}"
+    fi
+    CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 
     USE_BUILTIN_REDIS="${USE_BUILTIN_REDIS:-true}"
     USE_BUILTIN_POSTGRES="${USE_BUILTIN_POSTGRES:-true}"

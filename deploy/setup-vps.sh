@@ -15,6 +15,8 @@ source "$SCRIPT_DIR/lib/compose.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=deploy/lib/lifecycle.sh
 source "$SCRIPT_DIR/lib/lifecycle.sh"
+# shellcheck source=deploy/lib/api-ready.sh
+source "$SCRIPT_DIR/lib/api-ready.sh"
 
 cd "$PROJECT_ROOT"
 
@@ -70,17 +72,7 @@ deploy_docker() {
 
     compose_up --build --force-recreate
 
-    info "等待 API 就绪（最多 90 秒）..."
-    for i in $(seq 1 45); do
-        if curl -fsS http://127.0.0.1:5080/health >/dev/null 2>&1; then
-            ok "API 就绪: http://127.0.0.1:5080/health"
-            return 0
-        fi
-        sleep 2
-    done
-
-    warn "API 暂未响应，请查看日志:"
-    echo "  docker compose -f docker-compose.prod.yml logs -f api"
+    wait_for_api_ready 45 2 || warn "API 暂未就绪，可继续查看上方诊断；Nginx 步骤仍会尝试执行"
 }
 
 deploy_nginx() {
