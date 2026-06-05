@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# WebSearch 一键修复
-# 不删数据、不重装证书
+# WebSearch 一键修复（非交互，使用已有 .env）
 # 用法: sudo bash fix.sh
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,21 +10,27 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/compose.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/api-ready.sh"
-source "$SCRIPT_DIR/lib/nginx-cert.sh"
 
 cd "$PROJECT_ROOT"
 
-# ---------- helpers ----------
-
-show_env() {
-    info ".env 当前连接配置:"
-    while IFS= read -r line; do
-        echo "  ${line//Password=*/Password=***}"
-    done < <(/usr/bin/grep -E '^(USE_BUILTIN|REDIS_CONNECTION|POSTGRES_CONNECTION)' .env 2>/dev/null || true)
+# ===========================
+# 验证 .env 基本完整性
+# ===========================
+validate_env() {
+    [[ -f .env ]] || { err ".env 不存在，请先运行: sudo bash install.sh"; exit 1; }
+    /usr/bin/grep -q '^POSTGRES_CONNECTION=' .env || {
+        err ".env 缺少 POSTGRES_CONNECTION，请重新运行: sudo bash install.sh"
+        exit 1
+    }
+    /usr/bin/grep -q '^REDIS_CONNECTION=' .env || {
+        warn ".env 缺少 REDIS_CONNECTION，将追加默认值"
+        echo 'REDIS_CONNECTION="localhost:6379,abortConnect=false"' >> .env
+    }
+    ok ".env 校验通过"
 }
 
-fix_env_localhost() {
-    # API 现在用 host 网络 — 把所有 host.docker.internal 替换成 localhost
+# 旧 host.docker.internal 残留 → 替换成 localhost
+fix_old_gateway() {
     if /usr/bin/grep -q 'host\.docker\.internal' .env 2>/dev/null; then
         python3 -c "
 with open('.env') as f:
@@ -34,120 +38,74 @@ with open('.env') as f:
 c = c.replace('host.docker.internal', 'localhost')
 with open('.env', 'w') as f:
     f.write(c)
-print('[fixed] host.docker.internal → localhost')
-"
+" && warn "已将 .env 中 host.docker.internal → localhost（旧配置兼容）"
     fi
-    # 清理旧的 override 文件（已不再需要）
     rm -f docker-compose.prod.override.yml 2>/dev/null || true
 }
 
-# 当 USE_BUILTIN_POSTGRES=false 且 5432 上有 Docker 容器时
-# 确保 websearch 数据库和用户存在
-ensure_external_pg() {
-    [[ "${USE_BUILTIN_POSTGRES:-true}" == "true" ]] && return 0
-
-    local container
-    container="$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null \
-        | /usr/bin/grep -E '127\.0\.0\.1:5432->|0\.0\.0\.0:5432->' \
-        | awk '{print $1}' | head -1 || true)"
-    [[ -z "$container" ]] && return 0
-
-    # 从 POSTGRES_CONNECTION 解析数据库、用户、密码
-    local db user pass
-    db="$(echo   "${POSTGRES_CONNECTION:-}" | /usr/bin/grep -oP '(?i)(?<=Database=)[^;]+'  || echo "websearch")"
-    user="$(echo "${POSTGRES_CONNECTION:-}" | /usr/bin/grep -oP '(?i)(?<=Username=)[^;]+' || echo "websearch")"
-    pass="$(echo "${POSTGRES_CONNECTION:-}" | /usr/bin/grep -oP '(?i)(?<=Password=)[^;]+' || echo "")"
-
-    [[ -z "$pass" ]] && return 0
-    [[ -z "$db"   ]] && db="websearch"
-    [[ -z "$user" ]] && user="websearch"
-
-    info "外部 Postgres 容器: ${container}，确保数据库 '${db}' 和用户 '${user}' 存在..."
-    docker exec "$container" psql -U postgres \
-        -c "SELECT 1 FROM pg_database WHERE datname='${db}'" 2>/dev/null \
-        | /usr/bin/grep -q 1 \
-        || docker exec "$container" psql -U postgres -c "CREATE DATABASE ${db};" 2>/dev/null \
-        && ok "数据库 ${db} 已就绪" \
-        || warn "创建数据库 ${db} 失败，请手动创建"
-
-    docker exec "$container" psql -U postgres \
-        -c "SELECT 1 FROM pg_roles WHERE rolname='${user}'" 2>/dev/null \
-        | /usr/bin/grep -q 1 \
-        || {
-            docker exec "$container" psql -U postgres -c "CREATE USER ${user} WITH PASSWORD '${pass}';" 2>/dev/null
-            docker exec "$container" psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE ${db} TO ${user};" 2>/dev/null
-            ok "用户 ${user} 已创建并授权"
-        } || warn "用户 ${user} 可能已存在，跳过创建"
-
-    # 确保用户对 public schema 有权限（Postgres 15+ 需要）
-    docker exec "$container" psql -U postgres -d "${db}" \
-        -c "GRANT ALL ON SCHEMA public TO ${user};" 2>/dev/null || true
+# 显示当前连接配置（隐藏密码）
+show_config() {
+    info "当前连接配置:"
+    while IFS= read -r line; do
+        echo "  ${line//Password=*/Password=***}"
+    done < <(/usr/bin/grep -E '^(USE_BUILTIN|REDIS_CONNECTION|POSTGRES_CONNECTION)' .env 2>/dev/null || true)
 }
 
+# Nginx 重载（如果已配置）
 reload_nginx() {
+    load_env_file .env
     command -v nginx >/dev/null 2>&1 || return 0
-    repair_env_file "$PROJECT_ROOT/.env" 2>/dev/null || true
     [[ -z "${API_DOMAIN:-}" ]] && return 0
     local site="${NGINX_SITE_NAME:-websearch}"
     [[ -f "/etc/nginx/sites-enabled/${site}" ]] || return 0
-    nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+    nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || return 0
     ok "Nginx 已重载"
     local code
-    code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 "https://${API_DOMAIN}/health/live" 2>/dev/null || echo "000")"
-    [[ "$code" == "200" ]] && ok "公网 HTTPS ✓ https://${API_DOMAIN}/health/live" \
-                           || warn "公网探活 HTTP ${code}"
+    code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 \
+        "https://${API_DOMAIN}/health/live" 2>/dev/null || echo "000")"
+    [[ "$code" == "200" ]] \
+        && ok "公网 HTTPS ✓  https://${API_DOMAIN}/health/live" \
+        || warn "公网探活 HTTP ${code}"
 }
-
-# ---------- main ----------
 
 main() {
     require_root
-
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║    WebSearch 一键修复（fix.sh）       ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
     echo ""
 
-    [[ -f .env ]] || { err "未找到 .env，请先运行: sudo bash install.sh"; exit 1; }
-
     ensure_docker
     ensure_curl
 
-    step "[1/4] 修复 .env"
-    repair_env_file "$PROJECT_ROOT/.env"
-    fix_env_localhost
-    repair_env_file "$PROJECT_ROOT/.env"   # 重新修复引号（localhost 替换后可能不需要）
-    show_env
+    step "[1/3] 校验 .env"
+    validate_env
+    fix_old_gateway
+    show_config
 
-    step "[2/4] 同步 SearXNG 密钥"
-    if [[ -f deploy/searxng/settings.yml ]] && [[ -n "${SEARXNG_SECRET_KEY:-}" ]]; then
-        /usr/bin/grep -q 'secret_key:' deploy/searxng/settings.yml 2>/dev/null \
-            && sed -i "s|secret_key:.*|secret_key: \"${SEARXNG_SECRET_KEY}\"|" deploy/searxng/settings.yml \
-            && ok "已同步" || true
-    fi
-
-    step "[3/4] 重建并启动"
-    info "API 使用 host 网络 → localhost:6379 / localhost:5432 直接访问宿主机服务"
-    ensure_external_pg
+    step "[2/3] 重建并启动"
     compose_up --build --force-recreate
 
-    step "[4/4] 等待就绪"
+    step "[3/3] 等待就绪"
     if wait_for_api_ready 120 5080; then
         reload_nginx
         echo ""
         echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║         修复完成！                    ║${NC}"
+        echo -e "${GREEN}║          修复完成！                   ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
         echo ""
-        echo "  curl http://127.0.0.1:5080/health"
-        [[ -n "${API_DOMAIN:-}" ]] && echo "  curl https://${API_DOMAIN}/health"
+        load_env_file .env 2>/dev/null || true
+        echo "  本地: curl http://127.0.0.1:5080/health"
+        [[ -n "${API_DOMAIN:-}" ]] && echo "  公网: curl https://${API_DOMAIN}/health"
         echo ""
         exit 0
     fi
 
     echo ""
-    err "API 未就绪，见上方诊断。"
+    err "API 未就绪，见上方诊断。修复建议："
+    echo "  1. 重新安装: sudo bash install.sh"
+    echo "  2. 查看日志: docker compose -f docker-compose.prod.yml logs api"
     exit 1
 }
 

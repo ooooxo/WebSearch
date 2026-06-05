@@ -1,155 +1,13 @@
 #!/usr/bin/env bash
-# Shared helpers for WebSearch deploy scripts.
+# 基础工具库 — 颜色输出 / 密钥生成 / 端口检测 / 容器检测 / 交互提示
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+readonly RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m' CYAN='\033[0;36m' NC='\033[0m'
 
-info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
-ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
-err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-step()  { echo -e "\n${BOLD}${CYAN}==> $*${NC}\n"; }
-
-# 部分 VPS 把 grep alias 成 rg，-E 会报错；统一走系统 grep
-grep_safe() {
-    if [[ -x /usr/bin/grep ]]; then
-        /usr/bin/grep "$@"
-    else
-        command grep "$@"
-    fi
-}
-
-require_root() {
-    if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-        err "请使用 root 运行: sudo bash deploy/setup-vps.sh"
-        exit 1
-    fi
-}
-
-prompt() {
-    local var_name="$1"
-    local message="$2"
-    local default="${3:-}"
-    local secret="${4:-false}"
-    local value=""
-
-    # secret 模式：允许留空，由调用方自动生成
-    if [[ "$secret" == "true" ]]; then
-        read -r -s -p "${message} [回车自动生成]: " value
-        echo ""
-        value="${value:-$default}"
-        printf -v "$var_name" '%s' "$value"
-        return
-    fi
-
-    if [[ -n "${default}" ]]; then
-        read -r -p "${message} [${default}]: " value
-        value="${value:-$default}"
-    else
-        while [[ -z "${value:-}" ]]; do
-            read -r -p "${message}: " value
-            if [[ -z "${value}" ]]; then
-                warn "此项不能为空。"
-            fi
-        done
-    fi
-
-    printf -v "$var_name" '%s' "$value"
-}
-
-prompt_optional() {
-    local var_name="$1"
-    local message="$2"
-    local value=""
-    read -r -p "${message} (可选，直接回车跳过): " value
-    printf -v "$var_name" '%s' "$value"
-}
-
-prompt_yn() {
-    local message="$1"
-    local default="${2:-y}"
-    local hint="Y/n"
-    [[ "$default" == "n" ]] && hint="y/N"
-
-    while true; do
-        read -r -p "${message} (${hint}): " answer
-        answer="${answer:-$default}"
-        case "${answer,,}" in
-            y|yes) return 0 ;;
-            n|no)  return 1 ;;
-            *) warn "请输入 y 或 n" ;;
-        esac
-    done
-}
-
-generate_secret() {
-    if command -v openssl >/dev/null 2>&1; then
-        openssl rand -hex 24
-    else
-        tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48
-    fi
-}
-
-# 写入 .env 时用双引号包裹（bash source 与 Docker Compose 均兼容；单引号会被 Docker 原样传入容器）
-env_quote() {
-    local value="$1"
-    value="${value//\\/\\\\}"
-    value="${value//\"/\\\"}"
-    value="${value//\$/\\\$}"
-    value="${value//\`/\\\`}"
-    printf '"%s"' "$value"
-}
-
-load_env_file() {
-    local env_file="${1:-.env}"
-    if [[ ! -f "$env_file" ]]; then
-        err "未找到 ${env_file}"
-        return 1
-    fi
-    set -a
-    # shellcheck disable=SC1090
-    source "$env_file"
-    set +a
-}
-
-ensure_command() {
-    local cmd="$1"
-    local install_hint="$2"
-    if command -v "$cmd" >/dev/null 2>&1; then
-        return 0
-    fi
-    err "缺少命令: ${cmd}"
-    [[ -n "$install_hint" ]] && info "$install_hint"
-    return 1
-}
-
-ensure_docker() {
-    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-        ok "Docker: $(docker --version)"
-        ok "Compose: $(docker compose version)"
-        return 0
-    fi
-
-    warn "未检测到 Docker。"
-    if prompt_yn "是否现在安装 Docker?" "y"; then
-        curl -fsSL https://get.docker.com | sh
-        ok "Docker 安装完成"
-    else
-        err "需要 Docker 才能继续。"
-        exit 1
-    fi
-}
-
-ensure_curl() {
-    if command -v curl >/dev/null 2>&1; then
-        return 0
-    fi
-    apt-get update && apt-get install -y curl
-}
+ok()   { echo -e "${GREEN}[OK]${NC}  $*"; }
+info() { echo -e "${CYAN}[INFO]${NC} $*"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+err()  { echo -e "${RED}[ERR]${NC}  $*" >&2; }
+step() { echo ""; echo -e "${CYAN}==> $*${NC}"; }
 
 banner() {
     echo ""
@@ -158,3 +16,77 @@ banner() {
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
     echo ""
 }
+
+require_root() {
+    [[ $EUID -eq 0 ]] || { err "请用 sudo 运行此脚本"; exit 1; }
+}
+
+ensure_docker() {
+    command -v docker >/dev/null 2>&1 || { err "未安装 Docker，请先安装"; exit 1; }
+    ok "Docker: $(docker --version)"
+    if docker compose version >/dev/null 2>&1; then
+        ok "Compose: $(docker compose version)"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        ok "Compose: $(docker-compose --version)"
+    else
+        err "未找到 docker compose 或 docker-compose"; exit 1
+    fi
+}
+
+ensure_curl() {
+    command -v curl >/dev/null 2>&1 || apt-get install -y curl -qq >/dev/null 2>&1
+}
+
+# 生成 URL-safe 随机密钥（仅 a-zA-Z0-9_- 无需转义）
+generate_secret() {
+    python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+}
+
+# 端口是否在监听
+port_in_use() {
+    local port="$1"
+    ss -tln 2>/dev/null | /usr/bin/grep -qE ":${port}[[:space:]]" \
+        || netstat -tln 2>/dev/null | /usr/bin/grep -qE ":${port}[[:space:]]" \
+        || false
+}
+
+# 找到占用该端口的 Docker 容器（返回完整信息行）
+container_on_port() {
+    local port="$1"
+    docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' 2>/dev/null \
+        | /usr/bin/grep -E "(0\.0\.0\.0|127\.0\.0\.1|\[::\]):${port}->" \
+        | head -1
+}
+
+# 只返回容器名
+container_name_on_port() {
+    container_on_port "$1" | awk '{print $1}'
+}
+
+# 交互提示：带默认值
+# 用法: prompt VAR_NAME "提示文字" "默认值"
+prompt() {
+    local _var="$1" _msg="$2" _default="${3:-}"
+    local _input
+    if [[ -n "$_default" ]]; then
+        read -r -p "  ${_msg} [${_default}]: " _input
+        printf -v "$_var" '%s' "${_input:-$_default}"
+    else
+        read -r -p "  ${_msg}: " _input
+        printf -v "$_var" '%s' "$_input"
+    fi
+}
+
+# 交互提示：是/否
+# 用法: prompt_yn "提示" "y"|"n"  → 返回 0=yes, 1=no
+prompt_yn() {
+    local _msg="$1" _default="${2:-y}"
+    local _hint _input
+    [[ "$_default" == "y" ]] && _hint="Y/n" || _hint="y/N"
+    read -r -p "${_msg} (${_hint}): " _input
+    _input="${_input:-$_default}"
+    [[ "${_input,,}" =~ ^y ]]
+}
+
+# 兼容 rg 别名的 grep
+grep_safe() { /usr/bin/grep "$@"; }
