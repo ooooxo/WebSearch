@@ -6,7 +6,16 @@ Agent-oriented web search and scraping service built with ASP.NET Core (.NET 10)
 - **MCP stdio** (`WebSearch.Mcp`) — Claude Desktop / Cursor integration
 - **Shared core** (`WebSearch.Application`) — business logic written once
 
-## Quick start
+## Deployment
+
+**VPS production (full stack + Nginx):** see [docs/deploy-vps.md](docs/deploy-vps.md)
+
+```bash
+cp .env.production.example .env   # edit passwords
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+## Quick start (local development)
 
 ### 1. Infrastructure (Docker)
 

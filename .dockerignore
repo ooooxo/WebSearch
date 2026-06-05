@@ -1,0 +1,16 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+**/tests
+**/*.md
+!docs/deploy-vps.md
+**/agent-transcripts
+**/agent-tools
+**/.cursor

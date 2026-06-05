@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using WebSearch.Api.Endpoints;
+using WebSearch.Api.Extensions;
 using WebSearch.Application;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -39,6 +40,7 @@ app.MapHealthChecks("/health");
 app.MapSearchEndpoints();
 app.MapScrapeEndpoints();
 
+await app.ApplyDatabaseMigrationsAsync();
 app.Run();
 
 public partial class Program;

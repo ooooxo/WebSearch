@@ -1,0 +1,86 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/WebSearch.Api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Database__ApplyMigrationsOnStartup: "true"
+      HealthChecks__IncludeDependencies: "true"
+      Redis__Connection: redis:6379,abortConnect=false
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}
+      SearXng__BaseUrl: http://searxng:8080
+      Crawl4Ai__BaseUrl: http://crawl4ai:8001
+      Firecrawl__ApiKey: ${FIRECRAWL_API_KEY:-}
+      Jina__ApiKey: ${JINA_API_KEY:-}
+      Cache__SearchTtlSeconds: ${CACHE_SEARCH_TTL:-7200}
+      Cache__ScrapeTtlSeconds: ${CACHE_SCRAPE_TTL:-86400}
+    ports:
+      - "127.0.0.1:5080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      searxng:
+        condition: service_started
+      crawl4ai:
+        condition: service_started
+    networks:
+      - websearch
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - websearch
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: websearch
+      POSTGRES_USER: websearch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U websearch -d websearch"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - websearch
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    volumes:
+      - ./deploy/searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+    networks:
+      - websearch
+
+  crawl4ai:
+    build: ./services/crawl4ai
+    restart: unless-stopped
+    shm_size: "2gb"
+    networks:
+      - websearch
+
+networks:
+  websearch:
+    driver: bridge
+
+volumes:
+  postgres_data:
