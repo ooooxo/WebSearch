@@ -61,6 +61,12 @@ compose_cmd() {
     # shellcheck disable=SC2206
     cmd=($compose_bin -f "$file_path")
 
+    # 若存在网络 override，自动追加（由 fix.sh / install.sh 生成）
+    local override_file="${PROJECT_ROOT:-$(pwd)}/docker-compose.prod.override.yml"
+    if [[ -f "$override_file" ]]; then
+        cmd+=(-f "$override_file")
+    fi
+
     if [[ "${USE_BUILTIN_REDIS:-true}" == "true" ]]; then
         cmd+=(--profile builtin-redis)
     fi

@@ -7,10 +7,12 @@ cleanup_before_install() {
     step "自动清理旧环境"
 
     if [[ -f "${PROJECT_ROOT}/.env" ]]; then
-        set -a
-        # shellcheck disable=SC1091
-        source "${PROJECT_ROOT}/.env"
-        set +a
+        repair_env_file "${PROJECT_ROOT}/.env" 2>/dev/null || {
+            set -a
+            # shellcheck disable=SC1091
+            source "${PROJECT_ROOT}/.env"
+            set +a
+        }
         site="${NGINX_SITE_NAME:-websearch}"
     fi
 

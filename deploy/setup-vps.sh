@@ -15,6 +15,10 @@ source "$SCRIPT_DIR/lib/compose.sh"
 source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=deploy/lib/lifecycle.sh
 source "$SCRIPT_DIR/lib/lifecycle.sh"
+# shellcheck source=deploy/lib/detect-infra.sh
+source "$SCRIPT_DIR/lib/detect-infra.sh"
+# shellcheck source=deploy/lib/container-network.sh
+source "$SCRIPT_DIR/lib/container-network.sh"
 # shellcheck source=deploy/lib/api-ready.sh
 source "$SCRIPT_DIR/lib/api-ready.sh"
 
@@ -69,6 +73,11 @@ deploy_docker() {
     else
         info "PostgreSQL: 外部"
     fi
+
+    setup_container_networking
+    # 重新读取 .env（setup_container_networking 可能已更新连接串）
+    repair_env_file "$PROJECT_ROOT/.env"
+    load_env
 
     compose_up --build --force-recreate
 
