@@ -14,6 +14,15 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()  { echo -e "\n${BOLD}${CYAN}==> $*${NC}\n"; }
 
+# 部分 VPS 把 grep alias 成 rg，-E 会报错；统一走系统 grep
+grep_safe() {
+    if [[ -x /usr/bin/grep ]]; then
+        /usr/bin/grep "$@"
+    else
+        command grep "$@"
+    fi
+}
+
 require_root() {
     if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
         err "请使用 root 运行: sudo bash deploy/setup-vps.sh"
@@ -85,11 +94,14 @@ generate_secret() {
     fi
 }
 
-# 写入 .env 时对含分号/空格的值加单引号，避免 source 时被 bash 拆成多条命令
+# 写入 .env 时用双引号包裹（bash source 与 Docker Compose 均兼容；单引号会被 Docker 原样传入容器）
 env_quote() {
     local value="$1"
-    value="${value//\'/\'\\\'\'}"
-    printf "'%s'" "$value"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//\$/\\\$}"
+    value="${value//\`/\\\`}"
+    printf '"%s"' "$value"
 }
 
 load_env_file() {

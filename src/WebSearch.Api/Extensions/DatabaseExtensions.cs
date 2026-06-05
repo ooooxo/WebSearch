@@ -12,13 +12,25 @@ public static class DatabaseExtensions
             return;
         }
 
-        await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetService<WebSearchDbContext>();
-        if (db is null)
-        {
-            return;
-        }
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Database");
 
-        await db.Database.MigrateAsync();
+        try
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetService<WebSearchDbContext>();
+            if (db is null)
+            {
+                return;
+            }
+
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Database migrations applied.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Database migration failed. Check ConnectionStrings:Postgres in container env. API will start but /health may return 503.");
+        }
     }
 }

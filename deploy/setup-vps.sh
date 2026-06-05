@@ -22,10 +22,10 @@ cd "$PROJECT_ROOT"
 
 is_placeholder_env() {
     [[ ! -f .env ]] && return 0
-    grep -q 'change-me-to-a-strong-password' .env 2>/dev/null \
-        || grep -q 'change-me-to-a-random-string' .env 2>/dev/null \
-        || grep -q 'api.yourdomain.com' .env 2>/dev/null \
-        || ! grep -q '^POSTGRES_CONNECTION=' .env 2>/dev/null
+    grep_safe -q 'change-me-to-a-strong-password' .env 2>/dev/null \
+        || grep_safe -q 'change-me-to-a-random-string' .env 2>/dev/null \
+        || grep_safe -q 'api.yourdomain.com' .env 2>/dev/null \
+        || ! grep_safe -q '^POSTGRES_CONNECTION=' .env 2>/dev/null
 }
 
 load_env() {
@@ -118,6 +118,7 @@ print_summary() {
     fi
 
     echo ""
+    echo "  一键修复: sudo bash fix.sh"
     echo "  重装:     sudo bash install.sh"
     echo "  仅卸载:   sudo bash uninstall.sh"
     echo "  看日志:   docker compose -f docker-compose.prod.yml logs -f api"

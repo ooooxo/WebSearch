@@ -86,7 +86,7 @@ else
     fi
     if [[ "${PRUNE_IMAGES}" == "true" ]]; then
         docker images --format '{{.Repository}}:{{.Tag}}' \
-            | grep -E '(^websearch-|^websearch/)|crawl4ai' \
+            | grep_safe -E '(^websearch-|^websearch/)|crawl4ai' \
             | xargs -r docker rmi -f 2>/dev/null || true
     fi
 fi

@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 # 补全 / 修复 .env 中缺失的变量（兼容旧版 .env）
 
-_quote_env_value() {
+_unquote_env_value() {
     local value="$1"
-    value="${value//\'/\'\\\'\'}"
-    printf "'%s'" "$value"
+    if [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    elif [[ "$value" =~ ^\"(.*)\"$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    fi
+    printf '%s' "$value"
+}
+
+_quote_env_value() {
+    env_quote "$(_unquote_env_value "$1")"
 }
 
 fix_env_quoting() {
@@ -18,10 +26,8 @@ fix_env_quoting() {
         if [[ "$line" =~ ^(POSTGRES_CONNECTION|POSTGRES_PASSWORD|REDIS_CONNECTION|SEARXNG_SECRET_KEY|FIRECRAWL_API_KEY|JINA_API_KEY)= ]]; then
             key="${line%%=*}"
             value="${line#*=}"
-            if [[ "$value" != \'*\' && "$value" != \"*\" ]]; then
-                line="${key}=$(_quote_env_value "$value")"
-                changed=true
-            fi
+            line="${key}=$(_quote_env_value "$value")"
+            changed=true
         fi
         printf '%s\n' "$line" >> "$tmp"
     done < "$env_file"
@@ -29,7 +35,7 @@ fix_env_quoting() {
     if [[ "$changed" == "true" ]]; then
         mv "$tmp" "$env_file"
         chmod 600 "$env_file"
-        ok "已修复 .env 引号（避免 source 时 POSTGRES_CONNECTION 被分号截断）"
+        ok "已修复 .env 引号（双引号，兼容 bash 与 Docker Compose）"
     else
         rm -f "$tmp"
     fi
@@ -52,11 +58,11 @@ repair_env_file() {
     local POSTGRES_PASSWORD POSTGRES_CONNECTION
 
     # 读取已有值（不 source 整文件，避免特殊字符问题）
-    USE_BUILTIN_REDIS="$(grep -E '^USE_BUILTIN_REDIS=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
-    USE_BUILTIN_POSTGRES="$(grep -E '^USE_BUILTIN_POSTGRES=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
-    REDIS_CONNECTION="$(grep -E '^REDIS_CONNECTION=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' || true)"
-    POSTGRES_PASSWORD="$(grep -E '^POSTGRES_PASSWORD=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' || true)"
-    POSTGRES_CONNECTION="$(grep -E '^POSTGRES_CONNECTION=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' || true)"
+    USE_BUILTIN_REDIS="$(grep_safe -E '^USE_BUILTIN_REDIS=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    USE_BUILTIN_POSTGRES="$(grep_safe -E '^USE_BUILTIN_POSTGRES=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    REDIS_CONNECTION="$(grep_safe -E '^REDIS_CONNECTION=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' || true)"
+    POSTGRES_PASSWORD="$(grep_safe -E '^POSTGRES_PASSWORD=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' || true)"
+    POSTGRES_CONNECTION="$(grep_safe -E '^POSTGRES_CONNECTION=' "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' || true)"
 
     USE_BUILTIN_REDIS="${USE_BUILTIN_REDIS:-true}"
     USE_BUILTIN_POSTGRES="${USE_BUILTIN_POSTGRES:-true}"
@@ -64,15 +70,15 @@ repair_env_file() {
 
     local changed=false
 
-    if ! grep -qE '^USE_BUILTIN_REDIS=' "$env_file"; then
+    if ! grep_safe -qE '^USE_BUILTIN_REDIS=' "$env_file"; then
         echo "USE_BUILTIN_REDIS=${USE_BUILTIN_REDIS}" >> "$env_file"
         changed=true
     fi
-    if ! grep -qE '^USE_BUILTIN_POSTGRES=' "$env_file"; then
+    if ! grep_safe -qE '^USE_BUILTIN_POSTGRES=' "$env_file"; then
         echo "USE_BUILTIN_POSTGRES=${USE_BUILTIN_POSTGRES}" >> "$env_file"
         changed=true
     fi
-    if ! grep -qE '^REDIS_CONNECTION=' "$env_file"; then
+    if ! grep_safe -qE '^REDIS_CONNECTION=' "$env_file"; then
         echo "REDIS_CONNECTION=$(_quote_env_value "$REDIS_CONNECTION")" >> "$env_file"
         changed=true
     fi

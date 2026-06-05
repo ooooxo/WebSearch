@@ -11,8 +11,8 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Database__ApplyMigrationsOnStartup: "true"
       HealthChecks__IncludeDependencies: "true"
-      Redis__Connection: ${REDIS_CONNECTION:-redis:6379,abortConnect=false}
-      ConnectionStrings__Postgres: ${POSTGRES_CONNECTION:-Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}}
+      Redis__Connection: "${REDIS_CONNECTION:-redis:6379,abortConnect=false}"
+      ConnectionStrings__Postgres: "${POSTGRES_CONNECTION:-Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=websearch}"
       SearXng__BaseUrl: http://searxng:8080
       Crawl4Ai__BaseUrl: http://crawl4ai:8001
       Firecrawl__ApiKey: ${FIRECRAWL_API_KEY:-}

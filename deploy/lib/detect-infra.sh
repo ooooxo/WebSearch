@@ -4,11 +4,11 @@
 detect_port_in_use() {
     local port="$1"
     if command -v ss >/dev/null 2>&1; then
-        ss -tln 2>/dev/null | grep -qE ":${port}[[:space:]]"
+        ss -tln 2>/dev/null | grep_safe -qE ":${port}[[:space:]]"
         return $?
     fi
     if command -v netstat >/dev/null 2>&1; then
-        netstat -tln 2>/dev/null | grep -qE ":${port}[[:space:]]"
+        netstat -tln 2>/dev/null | grep_safe -qE ":${port}[[:space:]]"
         return $?
     fi
     return 1
@@ -20,7 +20,7 @@ detect_docker_container_on_port() {
         return 0
     fi
     docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' 2>/dev/null \
-        | grep -E "0\.0\.0\.0:${port}->|127\.0\.0\.1:${port}->|\[::\]:${port}->" \
+        | grep_safe -E "0\.0\.0\.0:${port}->|127\.0\.0\.1:${port}->|\[::\]:${port}->" \
         | head -n 1
 }
 

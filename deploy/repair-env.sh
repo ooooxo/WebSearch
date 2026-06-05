@@ -17,4 +17,5 @@ repair_env_file "$PROJECT_ROOT/.env"
 
 echo ""
 info "当前 PostgreSQL 连接已配置（密码已隐藏）。"
-grep '^POSTGRES_CONNECTION=' .env | sed 's/Password=.*/Password=***/'
+grep_safe '^POSTGRES_CONNECTION=' .env | sed 's/Password=.*/Password=***/'
+grep_safe '^REDIS_CONNECTION=' .env || true

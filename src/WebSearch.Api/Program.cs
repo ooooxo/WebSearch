@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using WebSearch.Api.Endpoints;
 using WebSearch.Api.Extensions;
@@ -36,7 +37,15 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// 存活探针：仅进程是否启动（Nginx / 部署脚本用，不检查 Redis/PG）
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => check.Name == "self",
+});
+
+// 就绪探针：含 Redis + PostgreSQL
 app.MapHealthChecks("/health");
+
 app.MapSearchEndpoints();
 app.MapSearchDeepEndpoints();
 app.MapScrapeEndpoints();

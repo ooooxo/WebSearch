@@ -41,7 +41,7 @@ cleanup_before_install() {
     if command -v docker >/dev/null 2>&1; then
         info "清理旧镜像..."
         docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
-            | grep -E '(^websearch-|^websearch/)|crawl4ai' \
+            | grep_safe -E '(^websearch-|^websearch/)|crawl4ai' \
             | xargs -r docker rmi -f 2>/dev/null || true
     fi
 

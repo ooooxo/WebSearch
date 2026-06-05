@@ -57,7 +57,7 @@ update_searxng_secret() {
         return 0
     fi
 
-    if grep -q 'secret_key:' "$settings"; then
+    if grep_safe -q 'secret_key:' "$settings"; then
         sed -i "s|secret_key:.*|secret_key: \"${SEARXNG_SECRET_KEY}\"|" "$settings"
     else
         warn "settings.yml 中无 secret_key 字段，请手动检查。"
