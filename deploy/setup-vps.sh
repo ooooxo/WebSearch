@@ -27,10 +27,7 @@ is_placeholder_env() {
 }
 
 load_env() {
-    set -a
-    # shellcheck disable=SC1091
-    source .env
-    set +a
+    repair_env_file "$PROJECT_ROOT/.env"
 }
 
 configure_for_install() {

@@ -85,6 +85,25 @@ generate_secret() {
     fi
 }
 
+# 写入 .env 时对含分号/空格的值加单引号，避免 source 时被 bash 拆成多条命令
+env_quote() {
+    local value="$1"
+    value="${value//\'/\'\\\'\'}"
+    printf "'%s'" "$value"
+}
+
+load_env_file() {
+    local env_file="${1:-.env}"
+    if [[ ! -f "$env_file" ]]; then
+        err "未找到 ${env_file}"
+        return 1
+    fi
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+}
+
 ensure_command() {
     local cmd="$1"
     local install_hint="$2"
