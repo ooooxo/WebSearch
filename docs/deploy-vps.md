@@ -81,12 +81,23 @@ sudo bash install.sh
 
 | 步骤 | 内容 | 默认 |
 |------|------|------|
-| PostgreSQL 密码 | 回车自动生成 | 随机 48 字符 |
+| Redis | 检测到 6379 已有服务时询问是否复用 | 复用 |
+| PostgreSQL | 检测到 5432 已有服务时询问是否复用 | 复用 |
 | SearXNG 密钥 | 回车自动生成 | 随机 |
 | Firecrawl / Jina Key | 可选 | 跳过 |
 | 搜索/抓取缓存 TTL | 秒 | 7200 / 86400 |
 | API 域名 | 必填 | — |
 | Certbot 邮箱 | 必填 | — |
+
+复用外部 Redis/PostgreSQL 时，API 容器通过 `host.docker.internal` 访问宿主机端口（已在 compose 中配置）。
+
+### 卸载
+
+```bash
+sudo bash uninstall.sh
+```
+
+可选参数：`--purge-volumes` `--remove-nginx` `--remove-env` `--prune-images` `--yes`
 
 生成的 `.env` 权限为 `600`（仅 root 可读）。
 

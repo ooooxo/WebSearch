@@ -11,21 +11,19 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Database__ApplyMigrationsOnStartup: "true"
       HealthChecks__IncludeDependencies: "true"
-      Redis__Connection: redis:6379,abortConnect=false
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}
+      Redis__Connection: ${REDIS_CONNECTION:-redis:6379,abortConnect=false}
+      ConnectionStrings__Postgres: ${POSTGRES_CONNECTION}
       SearXng__BaseUrl: http://searxng:8080
       Crawl4Ai__BaseUrl: http://crawl4ai:8001
       Firecrawl__ApiKey: ${FIRECRAWL_API_KEY:-}
       Jina__ApiKey: ${JINA_API_KEY:-}
       Cache__SearchTtlSeconds: ${CACHE_SEARCH_TTL:-7200}
       Cache__ScrapeTtlSeconds: ${CACHE_SCRAPE_TTL:-86400}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:5080:8080"
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
       searxng:
         condition: service_started
       crawl4ai:
@@ -34,6 +32,7 @@ services:
       - websearch
 
   redis:
+    profiles: ["builtin-redis"]
     image: redis:7-alpine
     restart: unless-stopped
     healthcheck:
@@ -45,6 +44,7 @@ services:
       - websearch
 
   postgres:
+    profiles: ["builtin-postgres"]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:

@@ -13,7 +13,12 @@ Agent-oriented web search and scraping service built with ASP.NET Core (.NET 10)
 ```bash
 # 在 VPS 上克隆代码后，一条命令完成 .env + Docker + Nginx + HTTPS
 sudo bash install.sh
+
+# 卸载
+sudo bash uninstall.sh
 ```
+
+部署时可**自动检测并复用**宿主机上已有的 Redis / PostgreSQL（跳过新建容器）。
 
 ## Quick start (local development)
 

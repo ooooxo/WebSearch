@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY WebSearch.sln ./
+# 不依赖 WebSearch.sln（sln 可能未入库）；直接 restore 项目文件
 COPY src/WebSearch.Application/WebSearch.Application.csproj src/WebSearch.Application/
 COPY src/WebSearch.Api/WebSearch.Api.csproj src/WebSearch.Api/
 

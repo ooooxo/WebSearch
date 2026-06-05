@@ -9,6 +9,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=deploy/lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=deploy/lib/compose.sh
+source "$SCRIPT_DIR/lib/compose.sh"
 
 cd "$PROJECT_ROOT"
 
@@ -27,9 +29,23 @@ load_env() {
 }
 
 deploy_docker() {
+    load_env
+
     step "启动 Docker 服务"
 
-    docker compose -f docker-compose.prod.yml up -d --build
+    if [[ "${USE_BUILTIN_REDIS:-true}" == "true" ]]; then
+        info "Redis: 使用本项目内置容器"
+    else
+        info "Redis: 复用外部 → ${REDIS_CONNECTION}"
+    fi
+
+    if [[ "${USE_BUILTIN_POSTGRES:-true}" == "true" ]]; then
+        info "PostgreSQL: 使用本项目内置容器"
+    else
+        info "PostgreSQL: 复用外部"
+    fi
+
+    compose_up --build
 
     info "等待 API 就绪（最多 60 秒）..."
     for i in $(seq 1 30); do
@@ -90,7 +106,8 @@ print_summary() {
 
     echo ""
     echo "  查看日志:   docker compose -f docker-compose.prod.yml logs -f api"
-    echo "  重新部署:   sudo bash deploy/setup-vps.sh"
+    echo "  重新部署:   sudo bash install.sh"
+    echo "  卸载:       sudo bash uninstall.sh"
     echo ""
 }
 
