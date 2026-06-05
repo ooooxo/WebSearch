@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# WebSearch — 真正一键部署：.env 向导 + Docker 全栈 + Nginx HTTPS
-# 用法: sudo bash deploy/setup-vps.sh
+# WebSearch 傻瓜式一键重装：自动清理旧环境 → 配置 → Docker → Nginx
+# 用法: sudo bash install.sh
 
 set -euo pipefail
 
@@ -11,6 +11,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=deploy/lib/compose.sh
 source "$SCRIPT_DIR/lib/compose.sh"
+# shellcheck source=deploy/lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=deploy/lib/lifecycle.sh
+source "$SCRIPT_DIR/lib/lifecycle.sh"
 
 cd "$PROJECT_ROOT"
 
@@ -18,7 +22,8 @@ is_placeholder_env() {
     [[ ! -f .env ]] && return 0
     grep -q 'change-me-to-a-strong-password' .env 2>/dev/null \
         || grep -q 'change-me-to-a-random-string' .env 2>/dev/null \
-        || grep -q 'api.yourdomain.com' .env 2>/dev/null
+        || grep -q 'api.yourdomain.com' .env 2>/dev/null \
+        || ! grep -q '^POSTGRES_CONNECTION=' .env 2>/dev/null
 }
 
 load_env() {
@@ -28,35 +33,56 @@ load_env() {
     set +a
 }
 
+configure_for_install() {
+    # shellcheck source=deploy/configure-env.sh
+    source "$SCRIPT_DIR/configure-env.sh"
+
+    if [[ -f .env ]] && ! is_placeholder_env; then
+        repair_env_file "$PROJECT_ROOT/.env"
+        step "配置"
+        echo "  检测到已有 .env，将默认沿用现有配置。"
+        echo "  若要改域名、密码、Redis/PG 等，选 n 进入重新配置。"
+        echo ""
+        if prompt_yn "沿用现有配置直接重装?" "y"; then
+            load_env
+            ok "沿用现有 .env"
+            return 0
+        fi
+    fi
+
+    run_configure_env_interactive
+}
+
 deploy_docker() {
+    repair_env_file "$PROJECT_ROOT/.env"
     load_env
 
-    step "启动 Docker 服务"
+    step "构建并启动服务"
 
     if [[ "${USE_BUILTIN_REDIS:-true}" == "true" ]]; then
-        info "Redis: 使用本项目内置容器"
+        info "Redis: 内置容器"
     else
-        info "Redis: 复用外部 → ${REDIS_CONNECTION}"
+        info "Redis: 外部 → ${REDIS_CONNECTION}"
     fi
 
     if [[ "${USE_BUILTIN_POSTGRES:-true}" == "true" ]]; then
-        info "PostgreSQL: 使用本项目内置容器"
+        info "PostgreSQL: 内置容器"
     else
-        info "PostgreSQL: 复用外部"
+        info "PostgreSQL: 外部"
     fi
 
-    compose_up --build
+    compose_up --build --force-recreate
 
-    info "等待 API 就绪（最多 60 秒）..."
-    for i in $(seq 1 30); do
+    info "等待 API 就绪（最多 90 秒）..."
+    for i in $(seq 1 45); do
         if curl -fsS http://127.0.0.1:5080/health >/dev/null 2>&1; then
-            ok "API 健康检查通过: http://127.0.0.1:5080/health"
+            ok "API 就绪: http://127.0.0.1:5080/health"
             return 0
         fi
         sleep 2
     done
 
-    warn "API 暂未响应，查看日志:"
+    warn "API 暂未响应，请查看日志:"
     echo "  docker compose -f docker-compose.prod.yml logs -f api"
 }
 
@@ -68,22 +94,20 @@ deploy_nginx() {
 
     load_env
 
-    export NGINX_DOMAIN="${API_DOMAIN:-}"
-    export CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
-    export NGINX_BACKEND_HOST="${NGINX_BACKEND_HOST:-127.0.0.1}"
-    export NGINX_BACKEND_PORT="${NGINX_BACKEND_PORT:-5080}"
-    export NGINX_SITE_NAME="${NGINX_SITE_NAME:-websearch}"
-    export ENABLE_HTTPS="${ENABLE_HTTPS:-y}"
-    export DEPLOY_FROM_SETUP=1
-
-    if [[ -z "${NGINX_DOMAIN}" ]]; then
-        warn ".env 中无 API_DOMAIN，跳过 Nginx。"
+    if [[ -z "${API_DOMAIN:-}" ]]; then
+        warn "未配置 API_DOMAIN，跳过 Nginx。"
         return 0
     fi
 
-    step "配置 Nginx 反代 + HTTPS"
+    export NGINX_DOMAIN="${API_DOMAIN}"
+    export CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+    export NGINX_BACKEND_HOST="127.0.0.1"
+    export NGINX_BACKEND_PORT="5080"
+    export NGINX_SITE_NAME="${NGINX_SITE_NAME:-websearch}"
+    export ENABLE_HTTPS="y"
+    export DEPLOY_FROM_SETUP=1
 
-    # 已有域名则走非交互；setup-nginx 仍会检测后端
+    step "配置 Nginx + HTTPS"
     bash "$SCRIPT_DIR/nginx/setup-nginx.sh"
 }
 
@@ -92,22 +116,21 @@ print_summary() {
 
     echo ""
     echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║           部署完成！                 ║${NC}"
+    echo -e "${GREEN}║         部署完成，可以使用了         ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
     echo ""
 
     if [[ -n "${API_DOMAIN:-}" ]]; then
-        echo "  API 地址:   https://${API_DOMAIN}"
-        echo "  健康检查:   curl https://${API_DOMAIN}/health"
-        echo "  搜索测试:   curl -X POST https://${API_DOMAIN}/search -H 'Content-Type: application/json' -d '{\"query\":\"test\"}'"
+        echo "  API:      https://${API_DOMAIN}"
+        echo "  健康检查: curl https://${API_DOMAIN}/health"
     else
-        echo "  本地 API:   curl http://127.0.0.1:5080/health"
+        echo "  本地 API: curl http://127.0.0.1:5080/health"
     fi
 
     echo ""
-    echo "  查看日志:   docker compose -f docker-compose.prod.yml logs -f api"
-    echo "  重新部署:   sudo bash install.sh"
-    echo "  卸载:       sudo bash uninstall.sh"
+    echo "  重装:     sudo bash install.sh"
+    echo "  仅卸载:   sudo bash uninstall.sh"
+    echo "  看日志:   docker compose -f docker-compose.prod.yml logs -f api"
     echo ""
 }
 
@@ -119,27 +142,12 @@ main() {
     ensure_docker
     ensure_curl
 
-    # ── .env 配置 ──
-    if [[ -f .env ]] && ! is_placeholder_env; then
-        if prompt_yn "检测到已有 .env，是否重新配置?" "n"; then
-            # shellcheck source=deploy/configure-env.sh
-            source "$SCRIPT_DIR/configure-env.sh"
-            run_configure_env_interactive
-        else
-            ok "使用现有 .env"
-        fi
-    else
-        # shellcheck source=deploy/configure-env.sh
-        source "$SCRIPT_DIR/configure-env.sh"
-        run_configure_env_interactive
-    fi
+    # 每次安装前先清理旧环境（无需确认）
+    cleanup_before_install
 
-    # ── Docker ──
+    configure_for_install
     deploy_docker
-
-    # ── Nginx ──
     deploy_nginx
-
     print_summary
 }
 

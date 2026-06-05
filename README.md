@@ -11,14 +11,15 @@ Agent-oriented web search and scraping service built with ASP.NET Core (.NET 10)
 **VPS production (one command):** see [docs/deploy-vps.md](docs/deploy-vps.md)
 
 ```bash
-# 在 VPS 上克隆代码后，一条命令完成 .env + Docker + Nginx + HTTPS
+# 在 VPS 上：一条命令完成 清理旧环境 + 配置 + 部署 + HTTPS
+# 再次运行 = 自动卸载后重装（.env 默认沿用）
 sudo bash install.sh
 
-# 卸载
+# 仅卸载（不重装）
 sudo bash uninstall.sh
 ```
 
-部署时可**自动检测并复用**宿主机上已有的 Redis / PostgreSQL（跳过新建容器）。
+首次运行走配置向导；之后重装默认沿用 `.env`，直接回车即可。部署时可**自动检测并复用**宿主机已有的 Redis / PostgreSQL。
 
 ## Quick start (local development)
 

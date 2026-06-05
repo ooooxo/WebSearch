@@ -62,19 +62,21 @@ git clone <你的仓库地址> .
 
 ---
 
-## 4. 一键部署（推荐）
+## 4. 一键部署 / 重装（推荐）
 
 ```bash
 cd /opt/websearch
 sudo bash install.sh
 ```
 
+**每次运行 `install.sh` 都会先自动清理旧环境**（容器、数据卷、镜像、Nginx 配置），再重新安装。`.env` 默认保留并沿用，直接回车即可重装。
+
 脚本自动完成：
 
-1. 检测/安装 Docker
-2. **交互式配置 `.env`**（密码可回车自动生成）
-3. 同步 SearXNG `secret_key`
-4. `docker compose` 启动全栈
+1. **自动卸载旧环境**（无需确认）
+2. 检测/安装 Docker
+3. 配置 `.env`（首次向导；重装默认沿用现有配置）
+4. `docker compose` 构建并启动全栈
 5. Nginx 反代 + Let's Encrypt HTTPS
 
 ### 交互向导会问什么
@@ -91,13 +93,15 @@ sudo bash install.sh
 
 复用外部 Redis/PostgreSQL 时，API 容器通过 `host.docker.internal` 访问宿主机端口（已在 compose 中配置）。
 
-### 卸载
+### 卸载（不重装）
 
 ```bash
-sudo bash uninstall.sh
+sudo bash uninstall.sh          # 交互确认
+sudo bash uninstall.sh --yes    # 跳过确认
+sudo bash uninstall.sh --yes --remove-env   # 连 .env 一起删
 ```
 
-可选参数：`--purge-volumes` `--remove-nginx` `--remove-env` `--prune-images` `--yes`
+日常重装直接 `sudo bash install.sh` 即可，不必单独 uninstall。
 
 生成的 `.env` 权限为 `600`（仅 root 可读）。
 
