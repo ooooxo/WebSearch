@@ -17,8 +17,6 @@ source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/lifecycle.sh"
 # shellcheck source=deploy/lib/detect-infra.sh
 source "$SCRIPT_DIR/lib/detect-infra.sh"
-# shellcheck source=deploy/lib/container-network.sh
-source "$SCRIPT_DIR/lib/container-network.sh"
 # shellcheck source=deploy/lib/api-ready.sh
 source "$SCRIPT_DIR/lib/api-ready.sh"
 
@@ -74,14 +72,10 @@ deploy_docker() {
         info "PostgreSQL: 外部"
     fi
 
-    setup_container_networking
-    # 重新读取 .env（setup_container_networking 可能已更新连接串）
-    repair_env_file "$PROJECT_ROOT/.env"
-    load_env
-
+    info "API 使用 host 网络 → localhost:6379 / localhost:5432 直接访问宿主机服务"
     compose_up --build --force-recreate
 
-    wait_for_api_ready 45 2 || warn "API 暂未就绪，可继续查看上方诊断；Nginx 步骤仍会尝试执行"
+    wait_for_api_ready 120 5080 || warn "API 暂未就绪，可继续查看上方诊断；Nginx 步骤仍会尝试执行"
 }
 
 deploy_nginx() {

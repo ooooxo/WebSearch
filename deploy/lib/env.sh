@@ -66,7 +66,7 @@ repair_env_file() {
 
     USE_BUILTIN_REDIS="${USE_BUILTIN_REDIS:-true}"
     USE_BUILTIN_POSTGRES="${USE_BUILTIN_POSTGRES:-true}"
-    REDIS_CONNECTION="${REDIS_CONNECTION:-redis:6379,abortConnect=false}"
+    REDIS_CONNECTION="${REDIS_CONNECTION:-localhost:6379,abortConnect=false}"
 
     local changed=false
 
@@ -90,7 +90,7 @@ repair_env_file() {
                 echo "POSTGRES_PASSWORD=$(_quote_env_value "$POSTGRES_PASSWORD")" >> "$env_file"
                 warn "已自动生成 POSTGRES_PASSWORD 并写入 .env"
             fi
-            POSTGRES_CONNECTION="Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
+            POSTGRES_CONNECTION="Host=localhost;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
         else
             err "USE_BUILTIN_POSTGRES=false 但 .env 缺少 POSTGRES_CONNECTION，请重新运行: sudo bash install.sh"
             return 1
@@ -121,12 +121,12 @@ export_env_for_compose() {
 
     export USE_BUILTIN_REDIS="${USE_BUILTIN_REDIS:-true}"
     export USE_BUILTIN_POSTGRES="${USE_BUILTIN_POSTGRES:-true}"
-    export REDIS_CONNECTION="${REDIS_CONNECTION:-redis:6379,abortConnect=false}"
+    export REDIS_CONNECTION="${REDIS_CONNECTION:-localhost:6379,abortConnect=false}"
     export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
     if [[ -z "${POSTGRES_CONNECTION:-}" ]]; then
         if [[ "${USE_BUILTIN_POSTGRES}" == "true" && -n "${POSTGRES_PASSWORD}" ]]; then
-            export POSTGRES_CONNECTION="Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
+            export POSTGRES_CONNECTION="Host=localhost;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
         fi
     else
         export POSTGRES_CONNECTION

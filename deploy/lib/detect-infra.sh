@@ -52,14 +52,12 @@ describe_existing_postgres() {
     return 1
 }
 
-# 从宿主机上的 Docker 容器访问已有服务时，API 容器用此主机名
-HOST_GATEWAY="${HOST_GATEWAY:-host.docker.internal}"
-
+# API 容器使用 host 网络 — 所有服务均通过 localhost 访问
 default_external_redis_connection() {
-    echo "${HOST_GATEWAY}:6379,abortConnect=false"
+    echo "localhost:6379,abortConnect=false"
 }
 
 default_external_postgres_connection() {
     local password="${1:-}"
-    echo "Host=${HOST_GATEWAY};Port=5432;Database=websearch;Username=websearch;Password=${password}"
+    echo "Host=localhost;Port=5432;Database=websearch;Username=websearch;Password=${password}"
 }
