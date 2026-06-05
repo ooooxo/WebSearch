@@ -123,6 +123,7 @@ print_summary() {
     if [[ -n "${API_DOMAIN:-}" ]]; then
         echo "  API:      https://${API_DOMAIN}"
         echo "  健康检查: curl https://${API_DOMAIN}/health"
+        echo "  深度搜索: curl -X POST https://${API_DOMAIN}/search/deep -H 'Content-Type: application/json' -d '{\"query\":\"test\",\"max_scrape\":3}'"
     else
         echo "  本地 API: curl http://127.0.0.1:5080/health"
     fi

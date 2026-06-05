@@ -25,7 +25,8 @@ public sealed class SearchService(
             throw new ArgumentException("Query is required.", nameof(request));
         }
 
-        var cacheKey = CacheKeyHelper.SearchKey(normalizedQuery, request.MaxResults);
+        var maxResults = Math.Clamp(request.MaxResults, 1, 50);
+        var cacheKey = CacheKeyHelper.SearchKey(normalizedQuery, maxResults);
         var cached = await cache.GetAsync<CachedSearchPayload>(cacheKey, cancellationToken);
         if (cached is not null)
         {
@@ -43,9 +44,40 @@ public sealed class SearchService(
         var payload = await response.Content.ReadFromJsonAsync<SearXngResponse>(cancellationToken)
             ?? throw new InvalidOperationException("SearXNG returned an empty response.");
 
-        var results = payload.Results
-            .Take(request.MaxResults)
-            .Select(r => new SearchResultItem(r.Title, r.Url, r.Content, r.Engine))
+        var raw = payload.Results.Select(r => new SearXngRawResult
+        {
+            Title = r.Title,
+            Url = r.Url,
+            Content = r.Content,
+            Engine = r.Engine,
+            Engines = r.Engines,
+            Positions = r.Positions,
+            Position = r.Position,
+        });
+
+        var merged = SearchResultMerger.Merge(raw, maxResults);
+        var results = merged
+            .Select(m => new
+            {
+                Merged = m,
+                Score = SearchResultScorer.Score(new SearchResultScoreInput
+                {
+                    Title = m.Title,
+                    Url = m.Url,
+                    Snippet = m.Snippet,
+                    Engines = m.Engines,
+                    Positions = m.Positions,
+                }, normalizedQuery),
+            })
+            .OrderByDescending(x => x.Score)
+            .Take(maxResults)
+            .Select(x => new SearchResultItem(
+                x.Merged.Title,
+                x.Merged.Url,
+                x.Merged.Snippet,
+                x.Merged.Engines.FirstOrDefault(),
+                x.Score,
+                x.Merged.Engines))
             .ToList();
 
         var ttl = TimeSpan.FromSeconds(cacheOptions.Value.SearchTtlSeconds);
@@ -79,5 +111,14 @@ public sealed class SearchService(
 
         [JsonPropertyName("engine")]
         public string? Engine { get; set; }
+
+        [JsonPropertyName("engines")]
+        public List<string>? Engines { get; set; }
+
+        [JsonPropertyName("positions")]
+        public List<int>? Positions { get; set; }
+
+        [JsonPropertyName("position")]
+        public int? Position { get; set; }
     }
 }

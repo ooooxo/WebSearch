@@ -77,6 +77,7 @@ public static class DependencyInjection
         }
 
         services.AddScoped<ISearchService, SearchService>();
+        services.AddScoped<ISearchDeepService, SearchDeepService>();
         services.AddScoped<IScrapeProvider, Crawl4AiScrapeProvider>();
         services.AddScoped<IScrapeProvider, FirecrawlScrapeProvider>();
         services.AddScoped<IScrapeProvider, JinaScrapeProvider>();

@@ -6,7 +6,13 @@ public sealed record SearchRequest(
     string Query,
     [property: JsonPropertyName("max_results")] int MaxResults = 10);
 
-public sealed record SearchResultItem(string Title, string Url, string? Snippet, string? Engine);
+public sealed record SearchResultItem(
+    string Title,
+    string Url,
+    string? Snippet,
+    string? Engine,
+    float Score,
+    [property: JsonPropertyName("engines")] IReadOnlyList<string> Engines);
 
 public sealed record SearchResponse(
     IReadOnlyList<SearchResultItem> Results,

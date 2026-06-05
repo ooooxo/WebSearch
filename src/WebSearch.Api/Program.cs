@@ -38,6 +38,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHealthChecks("/health");
 app.MapSearchEndpoints();
+app.MapSearchDeepEndpoints();
 app.MapScrapeEndpoints();
 
 await app.ApplyDatabaseMigrationsAsync();

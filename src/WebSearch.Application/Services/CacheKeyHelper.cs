@@ -11,6 +11,9 @@ internal static class CacheKeyHelper
     public static string ScrapeKey(string url) =>
         $"scrape:{Hash(url)}";
 
+    public static string SearchDeepKey(string query, int maxResults, int maxScrape, float minScore) =>
+        $"search-deep:{Hash(query)}:{maxResults}:{maxScrape}:{minScore:F2}";
+
     private static string Hash(string input)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));

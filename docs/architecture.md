@@ -50,6 +50,13 @@ flowchart TB
 | Redis | Response cache |
 | PostgreSQL | Request audit log |
 
+## Deep search flow (`POST /search/deep`)
+
+1. Client sends `query`, optional `max_results` (default 10), optional `max_scrape` (default 3)
+2. Run normal SearXNG search
+3. Scrape the top `max_scrape` result URLs via Crawl4AI (with fallback)
+4. Return one JSON payload: each item has `title`, `url`, `snippet`, plus `content` / `scrape_source` when scraped
+
 ## Search flow
 
 1. Client sends query via `GET /search` or `POST /search`
