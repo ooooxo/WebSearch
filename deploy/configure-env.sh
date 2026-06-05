@@ -56,29 +56,32 @@ update_searxng_secret() {
 
 configure_redis() {
     step "[1/4] Redis 配置"
-    echo "  API 容器使用 host 网络，通过 localhost:6379 访问宿主机上的 Redis。"
+    echo "  API 容器使用 host 网络，通过 localhost:6379 访问 Redis。"
     echo ""
 
     local detected=""
-    if detected="$(describe_existing_redis 2>/dev/null)"; then
-        info "检测到已有 Redis:"
+    detected="$(describe_existing_redis 2>/dev/null || true)"
+
+    if [[ -n "$detected" ]]; then
+        # 端口已被占用 — 不能再新建内置容器，只能使用已有服务
+        info "检测到端口 6379 已被占用:"
         echo "  ${detected}"
         echo ""
-        if prompt_yn "复用已有 Redis（不新建容器）?" "y"; then
-            USE_BUILTIN_REDIS=false
-            local default_conn="localhost:6379,abortConnect=false"
-            prompt REDIS_CONNECTION "Redis 连接串（使用 localhost）" "$default_conn"
-            ok "将连接外部 Redis: ${REDIS_CONNECTION}"
-            return
-        fi
-    else
-        info "未检测到 6379 端口上的 Redis。"
-        if prompt_yn "使用外部 Redis（非本项目容器）?" "n"; then
-            USE_BUILTIN_REDIS=false
-            prompt REDIS_CONNECTION "Redis 连接串（使用 localhost）" "localhost:6379,abortConnect=false"
-            ok "将连接外部 Redis: ${REDIS_CONNECTION}"
-            return
-        fi
+        warn "端口 6379 已占用，不能新建内置 Redis 容器（会冲突）。"
+        info "API 将通过 localhost:6379 直接连接上方服务。"
+        USE_BUILTIN_REDIS=false
+        prompt REDIS_CONNECTION "Redis 连接串（回车使用默认）" "localhost:6379,abortConnect=false"
+        ok "将使用已有 Redis: ${REDIS_CONNECTION}"
+        return
+    fi
+
+    # 端口空闲，可以选择
+    info "未检测到 6379 端口上的 Redis 服务。"
+    if prompt_yn "使用外部 Redis（已有服务，不新建容器）?" "n"; then
+        USE_BUILTIN_REDIS=false
+        prompt REDIS_CONNECTION "Redis 连接串" "localhost:6379,abortConnect=false"
+        ok "将连接外部 Redis: ${REDIS_CONNECTION}"
+        return
     fi
 
     USE_BUILTIN_REDIS=true
@@ -88,55 +91,58 @@ configure_redis() {
 
 configure_postgres() {
     step "[2/4] PostgreSQL 配置"
-    echo "  API 容器使用 host 网络，通过 localhost:5432 访问宿主机上的 PostgreSQL。"
+    echo "  API 容器使用 host 网络，通过 localhost:5432 访问 PostgreSQL。"
     echo ""
 
     local detected=""
-    if detected="$(describe_existing_postgres 2>/dev/null)"; then
-        info "检测到已有 PostgreSQL:"
+    detected="$(describe_existing_postgres 2>/dev/null || true)"
+
+    if [[ -n "$detected" ]]; then
+        # 端口已被占用 — 不能再新建内置容器，只能使用已有服务
+        info "检测到端口 5432 已被占用:"
         echo "  ${detected}"
         echo ""
-        if prompt_yn "复用已有 PostgreSQL（不新建容器）?" "y"; then
-            USE_BUILTIN_POSTGRES=false
+        warn "端口 5432 已占用，不能新建内置 PostgreSQL 容器（会冲突）。"
+        info "API 将通过 localhost:5432 直接连接上方服务。"
+        echo ""
+
+        USE_BUILTIN_POSTGRES=false
+        local pg_database pg_username
+        prompt pg_database "数据库名" "websearch"
+        prompt pg_username "用户名"   "websearch"
+        read -r -s -p "密码: " POSTGRES_PASSWORD; echo ""
+
+        POSTGRES_CONNECTION="Host=localhost;Port=5432;Database=${pg_database};Username=${pg_username};Password=${POSTGRES_PASSWORD}"
+
+        # 检测是否是 Docker 容器——可以帮助自动创建 DB
+        local container_name
+        container_name="$(detect_docker_container_on_port 5432 2>/dev/null | awk '{print $1}' || true)"
+        if [[ -n "$container_name" ]] && prompt_yn "检测到容器 ${container_name}，是否自动在其中创建数据库和用户?" "y"; then
+            _auto_create_pg_db "$container_name" "$pg_database" "$pg_username" "$POSTGRES_PASSWORD"
+        else
             echo ""
-            echo "请输入 PostgreSQL 连接信息（通过 localhost 访问）。"
-            local pg_port pg_database pg_username
-            prompt pg_port     "端口"   "5432"
-            prompt pg_database "数据库名" "websearch"
-            prompt pg_username "用户名"  "websearch"
-            local pg_pass=""
-            while [[ -z "${pg_pass}" ]]; do
-                read -r -s -p "密码: " pg_pass; echo ""
-                [[ -z "$pg_pass" ]] && warn "密码不能为空。"
-            done
-            POSTGRES_PASSWORD="$pg_pass"
-            POSTGRES_CONNECTION="Host=localhost;Port=${pg_port};Database=${pg_database};Username=${pg_username};Password=${pg_pass}"
-            ok "将连接外部 PostgreSQL"
-            echo ""
-            warn "请先确认在已有 PostgreSQL 中创建了库和用户，否则 API 启动会失败:"
+            info "请手动在 PostgreSQL 中执行:"
             echo "  CREATE DATABASE ${pg_database};"
-            echo "  CREATE USER ${pg_username} WITH PASSWORD '${pg_pass}';"
+            echo "  CREATE USER ${pg_username} WITH PASSWORD '${POSTGRES_PASSWORD}';"
             echo "  GRANT ALL PRIVILEGES ON DATABASE ${pg_database} TO ${pg_username};"
-            return
         fi
-    else
-        info "未检测到 5432 端口上的 PostgreSQL。"
-        if prompt_yn "使用外部 PostgreSQL（非本项目容器）?" "n"; then
-            USE_BUILTIN_POSTGRES=false
-            local pg_port pg_database pg_username
-            prompt pg_port     "端口"   "5432"
-            prompt pg_database "数据库名" "websearch"
-            prompt pg_username "用户名"  "websearch"
-            local pg_pass=""
-            while [[ -z "${pg_pass}" ]]; do
-                read -r -s -p "密码: " pg_pass; echo ""
-                [[ -z "$pg_pass" ]] && warn "密码不能为空。"
-            done
-            POSTGRES_PASSWORD="$pg_pass"
-            POSTGRES_CONNECTION="Host=localhost;Port=${pg_port};Database=${pg_database};Username=${pg_username};Password=${pg_pass}"
-            ok "将连接外部 PostgreSQL"
-            return
-        fi
+
+        ok "将使用已有 PostgreSQL: ${POSTGRES_CONNECTION//Password=*/Password=***}"
+        return
+    fi
+
+    # 端口空闲，可以选择
+    info "未检测到 5432 端口上的 PostgreSQL 服务。"
+    if prompt_yn "使用外部 PostgreSQL（已有服务，不新建容器）?" "n"; then
+        USE_BUILTIN_POSTGRES=false
+        local pg_port pg_database pg_username
+        prompt pg_port     "端口"   "5432"
+        prompt pg_database "数据库名" "websearch"
+        prompt pg_username "用户名"  "websearch"
+        read -r -s -p "密码: " POSTGRES_PASSWORD; echo ""
+        POSTGRES_CONNECTION="Host=localhost;Port=${pg_port};Database=${pg_database};Username=${pg_username};Password=${POSTGRES_PASSWORD}"
+        ok "将连接外部 PostgreSQL"
+        return
     fi
 
     USE_BUILTIN_POSTGRES=true
@@ -144,6 +150,23 @@ configure_postgres() {
     [[ -z "$POSTGRES_PASSWORD" ]] && POSTGRES_PASSWORD="$(generate_secret)"
     POSTGRES_CONNECTION="Host=localhost;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
     ok "将新建内置 PostgreSQL 容器（监听 127.0.0.1:5432）"
+}
+
+# 在目标容器中自动创建数据库和用户（仅当用户确认）
+_auto_create_pg_db() {
+    local container="$1" db="$2" user="$3" pass="$4"
+    info "在 ${container} 中创建 ${db} 数据库..."
+    docker exec "$container" psql -U postgres \
+        -c "CREATE DATABASE ${db};" 2>/dev/null \
+        && ok "数据库 ${db} 已创建" \
+        || warn "数据库 ${db} 可能已存在，跳过"
+    docker exec "$container" psql -U postgres \
+        -c "DROP USER IF EXISTS ${user};" 2>/dev/null || true
+    docker exec "$container" psql -U postgres \
+        -c "CREATE USER ${user} WITH PASSWORD '${pass}';"
+    docker exec "$container" psql -U postgres \
+        -c "GRANT ALL PRIVILEGES ON DATABASE ${db} TO ${user};"
+    ok "用户 ${user} 已创建并授权"
 }
 
 run_configure_env_interactive() {

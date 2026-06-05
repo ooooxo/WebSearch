@@ -41,6 +41,49 @@ print('[fixed] host.docker.internal → localhost')
     rm -f docker-compose.prod.override.yml 2>/dev/null || true
 }
 
+# 当 USE_BUILTIN_POSTGRES=false 且 5432 上有 Docker 容器时
+# 确保 websearch 数据库和用户存在
+ensure_external_pg() {
+    [[ "${USE_BUILTIN_POSTGRES:-true}" == "true" ]] && return 0
+
+    local container
+    container="$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null \
+        | /usr/bin/grep -E '127\.0\.0\.1:5432->|0\.0\.0\.0:5432->' \
+        | awk '{print $1}' | head -1 || true)"
+    [[ -z "$container" ]] && return 0
+
+    # 从 POSTGRES_CONNECTION 解析数据库、用户、密码
+    local db user pass
+    db="$(echo   "${POSTGRES_CONNECTION:-}" | /usr/bin/grep -oP '(?i)(?<=Database=)[^;]+'  || echo "websearch")"
+    user="$(echo "${POSTGRES_CONNECTION:-}" | /usr/bin/grep -oP '(?i)(?<=Username=)[^;]+' || echo "websearch")"
+    pass="$(echo "${POSTGRES_CONNECTION:-}" | /usr/bin/grep -oP '(?i)(?<=Password=)[^;]+' || echo "")"
+
+    [[ -z "$pass" ]] && return 0
+    [[ -z "$db"   ]] && db="websearch"
+    [[ -z "$user" ]] && user="websearch"
+
+    info "外部 Postgres 容器: ${container}，确保数据库 '${db}' 和用户 '${user}' 存在..."
+    docker exec "$container" psql -U postgres \
+        -c "SELECT 1 FROM pg_database WHERE datname='${db}'" 2>/dev/null \
+        | /usr/bin/grep -q 1 \
+        || docker exec "$container" psql -U postgres -c "CREATE DATABASE ${db};" 2>/dev/null \
+        && ok "数据库 ${db} 已就绪" \
+        || warn "创建数据库 ${db} 失败，请手动创建"
+
+    docker exec "$container" psql -U postgres \
+        -c "SELECT 1 FROM pg_roles WHERE rolname='${user}'" 2>/dev/null \
+        | /usr/bin/grep -q 1 \
+        || {
+            docker exec "$container" psql -U postgres -c "CREATE USER ${user} WITH PASSWORD '${pass}';" 2>/dev/null
+            docker exec "$container" psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE ${db} TO ${user};" 2>/dev/null
+            ok "用户 ${user} 已创建并授权"
+        } || warn "用户 ${user} 可能已存在，跳过创建"
+
+    # 确保用户对 public schema 有权限（Postgres 15+ 需要）
+    docker exec "$container" psql -U postgres -d "${db}" \
+        -c "GRANT ALL ON SCHEMA public TO ${user};" 2>/dev/null || true
+}
+
 reload_nginx() {
     command -v nginx >/dev/null 2>&1 || return 0
     repair_env_file "$PROJECT_ROOT/.env" 2>/dev/null || true
@@ -86,6 +129,7 @@ main() {
 
     step "[3/4] 重建并启动"
     info "API 使用 host 网络 → localhost:6379 / localhost:5432 直接访问宿主机服务"
+    ensure_external_pg
     compose_up --build --force-recreate
 
     step "[4/4] 等待就绪"
