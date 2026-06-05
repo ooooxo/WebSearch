@@ -8,11 +8,11 @@ Agent-oriented web search and scraping service built with ASP.NET Core (.NET 10)
 
 ## Deployment
 
-**VPS production (full stack + Nginx):** see [docs/deploy-vps.md](docs/deploy-vps.md)
+**VPS production (one command):** see [docs/deploy-vps.md](docs/deploy-vps.md)
 
 ```bash
-cp .env.production.example .env   # edit passwords
-docker compose -f docker-compose.prod.yml up -d --build
+# 在 VPS 上克隆代码后，一条命令完成 .env + Docker + Nginx + HTTPS
+sudo bash install.sh
 ```
 
 ## Quick start (local development)

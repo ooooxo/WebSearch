@@ -62,76 +62,62 @@ git clone <你的仓库地址> .
 
 ---
 
-## 4. 配置环境变量
-
-```bash
-cp .env.production.example .env
-nano .env
-```
-
-**必须修改：**
-
-```env
-POSTGRES_PASSWORD=你的强密码
-SEARXNG_SECRET_KEY=随机长字符串
-```
-
-可选填入 `FIRECRAWL_API_KEY`、`JINA_API_KEY`（抓取降级用）。
-
-修改 SearXNG 密钥（与 `.env` 保持一致）：
-
-```bash
-nano deploy/searxng/settings.yml
-# server.secret_key 改为与 SEARXNG_SECRET_KEY 相同或独立随机值
-```
-
----
-
-## 5. 一键启动全部服务
+## 4. 一键部署（推荐）
 
 ```bash
 cd /opt/websearch
+sudo bash install.sh
+```
+
+脚本自动完成：
+
+1. 检测/安装 Docker
+2. **交互式配置 `.env`**（密码可回车自动生成）
+3. 同步 SearXNG `secret_key`
+4. `docker compose` 启动全栈
+5. Nginx 反代 + Let's Encrypt HTTPS
+
+### 交互向导会问什么
+
+| 步骤 | 内容 | 默认 |
+|------|------|------|
+| PostgreSQL 密码 | 回车自动生成 | 随机 48 字符 |
+| SearXNG 密钥 | 回车自动生成 | 随机 |
+| Firecrawl / Jina Key | 可选 | 跳过 |
+| 搜索/抓取缓存 TTL | 秒 | 7200 / 86400 |
+| API 域名 | 必填 | — |
+| Certbot 邮箱 | 必填 | — |
+
+生成的 `.env` 权限为 `600`（仅 root 可读）。
+
+### 非交互部署（CI / 脚本）
+
+```bash
+sudo POSTGRES_PASSWORD='your-strong-password' \
+     API_DOMAIN=api.example.com \
+     CERTBOT_EMAIL=you@example.com \
+     FIRECRAWL_API_KEY=optional \
+     bash -c 'source deploy/configure-env.sh && run_configure_env_from_env && docker compose -f docker-compose.prod.yml up -d --build'
+```
+
+---
+
+## 5. 分步部署（备选）
+
+```bash
+# 仅配置 .env
+sudo bash deploy/configure-env.sh
+
+# 仅 Docker
 docker compose -f docker-compose.prod.yml up -d --build
+
+# 仅 Nginx
+sudo bash deploy/nginx/setup-nginx.sh
 ```
-
-首次构建 Crawl4AI 镜像较慢（需下载 Chromium），请耐心等待。
-
-查看状态：
-
-```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f api
-```
-
-API 监听在 **本机** `127.0.0.1:5080`（不对外网直接暴露）。
-
-数据库迁移会在 API 启动时**自动执行**（`Database__ApplyMigrationsOnStartup=true`）。
 
 ---
 
-## 6. 配置 Nginx 反代
-
-```bash
-sudo cp deploy/nginx/websearch.conf /etc/nginx/sites-available/websearch
-sudo nano /etc/nginx/sites-available/websearch
-# 将 api.yourdomain.com 改为你的域名
-
-sudo ln -sf /etc/nginx/sites-available/websearch /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-申请 HTTPS 证书：
-
-```bash
-sudo certbot --nginx -d api.yourdomain.com
-```
-
-Certbot 会自动配置 SSL 并重定向 HTTP → HTTPS。
-
----
-
-## 7. 验证
+## 6. 验证
 
 ```bash
 # 本机
@@ -201,7 +187,7 @@ docker compose -f docker-compose.prod.yml exec postgres \
 | 场景 | 命令 |
 |------|------|
 | **本地开发**（API 用 `dotnet run`） | `docker compose up -d`（仅基础设施） |
-| **VPS 生产**（全容器） | `docker compose -f docker-compose.prod.yml up -d --build` |
+| **VPS 生产**（全容器） | `sudo bash install.sh` |
 
 ---
 
