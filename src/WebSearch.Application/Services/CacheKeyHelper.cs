@@ -8,8 +8,10 @@ internal static class CacheKeyHelper
     public static string SearchKey(string query, int maxResults) =>
         $"search:{Hash(query)}:{maxResults}";
 
-    public static string ScrapeKey(string url) =>
-        $"scrape:{Hash(url)}";
+    public static string ScrapeKey(string url, string? query = null) =>
+        string.IsNullOrWhiteSpace(query)
+            ? $"scrape:{Hash(url)}"
+            : $"scrape:{Hash(url)}:{Hash(query)}";
 
     public static string SearchDeepKey(string query, int maxResults, int maxScrape, float minScore) =>
         $"search-deep:{Hash(query)}:{maxResults}:{maxScrape}:{minScore:F2}";

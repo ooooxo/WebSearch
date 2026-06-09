@@ -62,7 +62,9 @@ public sealed class SearchDeepService(
 
             if (selected)
             {
-                var scrape = await scrapeService.ScrapeAsync(new ScrapeRequest(item.Url), cancellationToken);
+                var scrape = await scrapeService.ScrapeAsync(
+                    new ScrapeRequest(item.Url, normalizedQuery),
+                    cancellationToken);
                 if (scrape.Success)
                 {
                     scrapedCount++;

@@ -44,9 +44,10 @@ public sealed class WebSearchTools
     public static async Task<string> WebScrape(
         IScrapeService scrapeService,
         [Description("The absolute URL to scrape.")] string url,
+        [Description("Optional query for BM25 content filtering (Crawl4AI).")] string? query = null,
         CancellationToken cancellationToken = default)
     {
-        var response = await scrapeService.ScrapeAsync(new ScrapeRequest(url), cancellationToken);
+        var response = await scrapeService.ScrapeAsync(new ScrapeRequest(url, query), cancellationToken);
         return JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true });
     }
 }

@@ -20,7 +20,7 @@ public sealed class ScrapeService(
     {
         var sw = Stopwatch.StartNew();
         var canonicalUrl = UrlCanonicalizer.Canonicalize(request.Url);
-        var cacheKey = CacheKeyHelper.ScrapeKey(canonicalUrl);
+        var cacheKey = CacheKeyHelper.ScrapeKey(canonicalUrl, request.Query);
         var cached = await cache.GetAsync<CachedScrapePayload>(cacheKey, cancellationToken);
         if (cached is not null)
         {
@@ -41,7 +41,7 @@ public sealed class ScrapeService(
 
             try
             {
-                content = await provider.ScrapeAsync(canonicalUrl, cancellationToken);
+                content = await provider.ScrapeAsync(canonicalUrl, request.Query, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(content))
                 {
                     source = provider.Name;

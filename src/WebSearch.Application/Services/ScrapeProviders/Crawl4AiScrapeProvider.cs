@@ -12,10 +12,13 @@ public sealed class Crawl4AiScrapeProvider(
     public string Name => "crawl4ai";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.BaseUrl);
 
-    public async Task<string?> ScrapeAsync(string url, CancellationToken cancellationToken = default)
+    public async Task<string?> ScrapeAsync(
+        string url,
+        string? query = null,
+        CancellationToken cancellationToken = default)
     {
         var client = httpClientFactory.CreateClient("crawl4ai");
-        var response = await client.PostAsJsonAsync("/crawl", new { url }, cancellationToken);
+        var response = await client.PostAsJsonAsync("/crawl", new { url, query }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             return null;

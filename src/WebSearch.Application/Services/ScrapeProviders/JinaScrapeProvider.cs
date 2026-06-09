@@ -11,7 +11,10 @@ public sealed class JinaScrapeProvider(
     public string Name => "jina";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.ApiKey);
 
-    public async Task<string?> ScrapeAsync(string url, CancellationToken cancellationToken = default)
+    public async Task<string?> ScrapeAsync(
+        string url,
+        string? query = null,
+        CancellationToken cancellationToken = default)
     {
         if (!IsConfigured)
         {
