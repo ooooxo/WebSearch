@@ -50,7 +50,7 @@ services:
   crawl-svc:
     build: ./services/crawl-svc
     restart: unless-stopped
-    shm_size: "1gb"
+    shm_size: "2gb"    # Chromium 需要足够的共享内存，官方推荐 ≥ 2gb
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 15s
