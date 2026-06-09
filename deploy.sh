@@ -107,8 +107,12 @@ echo; log "crawl-svc is ready."
 log "Starting app (C# + MCP SSE)..."
 docker compose up -d app
 
+# 读取实际端口（优先 .env，其次默认 18900）
+APP_PORT="${APP_PORT:-$(grep -E '^APP_PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '"' || echo 18900)}"
+APP_PORT="${APP_PORT:-18900}"
+
 WAIT=0
-until curl -sf "http://localhost:3000/health/live" >/dev/null 2>&1; do
+until curl -sf "http://localhost:${APP_PORT}/health/live" >/dev/null 2>&1; do
   printf '.'; sleep 2; WAIT=$((WAIT+2))
   [[ $WAIT -ge 120 ]] && die "App failed to start. Run: docker compose logs app"
 done
@@ -118,19 +122,19 @@ echo; log "App is ready."
 echo
 echo -e "  ${GREEN}✓ Deployment complete!${NC}"
 echo
-echo -e "  REST API    →  ${CYAN}http://localhost:3000${NC}"
-echo -e "  MCP SSE     →  ${CYAN}http://localhost:3000/mcp${NC}"
-echo -e "  Health      →  ${CYAN}http://localhost:3000/health${NC}"
+echo -e "  REST API    →  ${CYAN}http://localhost:${APP_PORT}${NC}"
+echo -e "  MCP SSE     →  ${CYAN}http://localhost:${APP_PORT}/mcp${NC}"
+echo -e "  Health      →  ${CYAN}http://localhost:${APP_PORT}/health${NC}"
 echo
 echo "  MCP client config (Claude Desktop / Cursor):"
-echo '  ┌─────────────────────────────────────────────────────────┐'
-echo '  │  {                                                       │'
-echo '  │    "mcpServers": {                                       │'
-echo '  │      "websearch": {                                      │'
-echo '  │        "url": "http://<YOUR_SERVER_IP>:3000/mcp"        │'
-echo '  │      }                                                   │'
-echo '  │    }                                                     │'
-echo '  │  }                                                       │'
-echo '  └─────────────────────────────────────────────────────────┘'
+echo '  ┌──────────────────────────────────────────────────────────────┐'
+echo "  │  {                                                            │"
+echo '  │    "mcpServers": {                                            │'
+echo '  │      "websearch": {                                           │'
+echo "  │        \"url\": \"http://<YOUR_SERVER_IP>:${APP_PORT}/mcp\"        │"
+echo '  │      }                                                        │'
+echo '  │    }                                                          │'
+echo '  │  }                                                            │'
+echo '  └──────────────────────────────────────────────────────────────┘'
 echo
 docker compose ps

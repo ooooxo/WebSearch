@@ -228,7 +228,7 @@ main() {
     if [[ -n "${NGINX_DOMAIN:-}" ]]; then
         DOMAIN="${NGINX_DOMAIN}"
         BACKEND_HOST="${NGINX_BACKEND_HOST:-127.0.0.1}"
-        BACKEND_PORT="${NGINX_BACKEND_PORT:-3000}"
+        BACKEND_PORT="${NGINX_BACKEND_PORT:-18900}"
         SITE_NAME="${NGINX_SITE_NAME:-websearch}"
         CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
         ENABLE_HTTPS="${ENABLE_HTTPS:-y}"
@@ -237,7 +237,7 @@ main() {
         echo ""
         prompt DOMAIN "API 域名" ""
         prompt BACKEND_HOST "后端地址" "127.0.0.1"
-        prompt BACKEND_PORT "后端端口" "3000"
+        prompt BACKEND_PORT "后端端口" "18900"
         prompt SITE_NAME "Nginx 站点文件名" "websearch"
         ENABLE_HTTPS="n"
         CERTBOT_EMAIL=""

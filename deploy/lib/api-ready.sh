@@ -3,7 +3,7 @@
 
 wait_for_api_ready() {
     local max_wait="${1:-120}"   # 最多等待秒数
-    local port="${2:-3000}"
+    local port="${2:-18900}"
     local elapsed=0
 
     info "等待 API 就绪（最多 ${max_wait}s）..."
@@ -47,7 +47,7 @@ wait_for_api_ready() {
 }
 
 _diagnose_api() {
-    local port="${1:-3000}"
+    local port="${1:-18900}"
 
     echo ""
     info "=== 容器状态 ==="

@@ -318,7 +318,7 @@ deploy_nginx() {
     export NGINX_DOMAIN="${API_DOMAIN}"
     export CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
     export NGINX_BACKEND_HOST="127.0.0.1"
-    export NGINX_BACKEND_PORT="3000"
+    export NGINX_BACKEND_PORT="18900"
     export NGINX_SITE_NAME="${NGINX_SITE_NAME:-websearch}"
     export ENABLE_HTTPS="y"
     export DEPLOY_FROM_SETUP=1
@@ -340,8 +340,8 @@ print_summary() {
         echo "  API:      https://${API_DOMAIN}"
         echo "  健康检查: curl https://${API_DOMAIN}/health"
     fi
-    echo "  本地检查: curl http://127.0.0.1:3000/health"
-    echo "  MCP SSE:  http://127.0.0.1:3000/mcp"
+    echo "  本地检查: curl http://127.0.0.1:18900/health"
+    echo "  MCP SSE:  http://127.0.0.1:18900/mcp"
     echo ""
     echo "  一键修复: sudo bash fix.sh"
     echo "  看日志:   docker compose logs -f app"
@@ -369,7 +369,7 @@ main() {
             CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
             cleanup_old_env
             deploy_docker
-            wait_for_api_ready 120 3000 || warn "API 暂未就绪，见上方诊断"
+            wait_for_api_ready 120 18900 || warn "API 暂未就绪，见上方诊断"
             deploy_nginx
             print_summary
             return
@@ -388,7 +388,7 @@ main() {
     cleanup_old_env
     deploy_docker
 
-    wait_for_api_ready 120 3000 || warn "API 暂未就绪，见上方诊断"
+    wait_for_api_ready 120 18900 || warn "API 暂未就绪，见上方诊断"
     deploy_nginx
     print_summary
 }

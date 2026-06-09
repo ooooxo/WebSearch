@@ -87,7 +87,7 @@ main() {
     compose_up --build --force-recreate
 
     step "[3/3] 等待就绪"
-    if wait_for_api_ready 120 3000; then
+    if wait_for_api_ready 120 18900; then
         reload_nginx
         echo ""
         echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
@@ -95,7 +95,7 @@ main() {
         echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
         echo ""
         load_env_file .env 2>/dev/null || true
-        echo "  本地: curl http://127.0.0.1:3000/health"
+        echo "  本地: curl http://127.0.0.1:18900/health"
         [[ -n "${API_DOMAIN:-}" ]] && echo "  公网: curl https://${API_DOMAIN}/health"
         echo ""
         exit 0
