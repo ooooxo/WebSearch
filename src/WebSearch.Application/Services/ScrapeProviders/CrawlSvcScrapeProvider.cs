@@ -5,11 +5,11 @@ using WebSearch.Application.Options;
 
 namespace WebSearch.Application.Services.ScrapeProviders;
 
-public sealed class Crawl4AiScrapeProvider(
+public sealed class CrawlSvcScrapeProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<Crawl4AiOptions> options) : IScrapeProvider
+    IOptions<CrawlSvcOptions> options) : IScrapeProvider
 {
-    public string Name => "crawl4ai";
+    public string Name => "crawl-svc";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.BaseUrl);
 
     public async Task<string?> ScrapeAsync(
@@ -17,16 +17,14 @@ public sealed class Crawl4AiScrapeProvider(
         string? query = null,
         CancellationToken cancellationToken = default)
     {
-        var client = httpClientFactory.CreateClient("crawl4ai");
-        var response = await client.PostAsJsonAsync("/crawl", new { url, query }, cancellationToken);
+        var client = httpClientFactory.CreateClient("crawl-svc");
+        var response = await client.PostAsJsonAsync("/crawl", new { url }, cancellationToken);
         if (!response.IsSuccessStatusCode)
-        {
             return null;
-        }
 
-        var payload = await response.Content.ReadFromJsonAsync<Crawl4AiResponse>(cancellationToken);
+        var payload = await response.Content.ReadFromJsonAsync<CrawlSvcResponse>(cancellationToken);
         return payload is { Success: true } ? payload.Content : null;
     }
 
-    private sealed record Crawl4AiResponse(string? Content, bool Success);
+    private sealed record CrawlSvcResponse(string? Content, bool Success, string Source);
 }

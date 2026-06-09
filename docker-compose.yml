@@ -1,22 +1,104 @@
+# WebSearch — production docker-compose
+# 所有容器共享 app-net 内网，仅 app 对外暴露端口 3000
+# 用法: cp .env.example .env && bash deploy.sh
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
+
 services:
+
+  # ── 主服务：C# API + MCP SSE ─────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: src/WebSearch.Api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://+:8080"
+      Database__ApplyMigrationsOnStartup: "true"
+      HealthChecks__IncludeDependencies: "true"
+      Redis__Connection: "redis:6379,abortConnect=false"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
+      SearXng__BaseUrl: "http://searxng:8080"
+      CrawlSvc__BaseUrl: "http://crawl-svc:8001"
+      Firecrawl__ApiKey: "${FIRECRAWL_API_KEY:-}"
+      Firecrawl__BaseUrl: "https://api.firecrawl.dev"
+      Cache__SearchTtlSeconds: "${CACHE_SEARCH_TTL:-7200}"
+      Cache__ScrapeTtlSeconds: "${CACHE_SCRAPE_TTL:-86400}"
+      Tavily__ApiKey: "${TAVILY_API_KEY:-}"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      searxng:
+        condition: service_started
+      crawl-svc:
+        condition: service_healthy
+    networks:
+      - app-net
+
+  # ── 抓取服务：httpx + Playwright + trafilatura ───────────────────────
+  crawl-svc:
+    build: ./services/crawl-svc
+    restart: unless-stopped
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-net
+
+  # ── 搜索引擎：SearXNG ────────────────────────────────────────────────
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    volumes:
+      - ./deploy/searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: "http://localhost:3000/"
+      SEARXNG_SECRET_KEY: "${SEARXNG_SECRET}"
+    networks:
+      - app-net
+
+  # ── 缓存：Redis ──────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - app-net
 
+  # ── 日志库：PostgreSQL ───────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: websearch
       POSTGRES_USER: websearch
-      POSTGRES_PASSWORD: websearch
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,21 +106,5 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  searxng:
-    image: searxng/searxng:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./deploy/searxng:/etc/searxng:rw
-    environment:
-      SEARXNG_BASE_URL: http://localhost:8080/
-
-  crawl4ai:
-    build: ./services/crawl4ai
-    ports:
-      - "8001:8001"
-    shm_size: "2gb"
-
-volumes:
-  postgres_data:
+    networks:
+      - app-net

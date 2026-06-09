@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Docker Compose 封装：读取 .env 决定是否启用内置 Redis/Postgres profile
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 
 _compose_bin() {
     if docker compose version >/dev/null 2>&1; then

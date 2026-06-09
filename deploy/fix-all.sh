@@ -40,7 +40,6 @@ with open('.env', 'w') as f:
     f.write(c)
 " && warn "已将 .env 中 host.docker.internal → localhost（旧配置兼容）"
     fi
-    rm -f docker-compose.prod.override.yml 2>/dev/null || true
 }
 
 # 显示当前连接配置（隐藏密码）
@@ -88,7 +87,7 @@ main() {
     compose_up --build --force-recreate
 
     step "[3/3] 等待就绪"
-    if wait_for_api_ready 120 5080; then
+    if wait_for_api_ready 120 3000; then
         reload_nginx
         echo ""
         echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
@@ -96,7 +95,7 @@ main() {
         echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
         echo ""
         load_env_file .env 2>/dev/null || true
-        echo "  本地: curl http://127.0.0.1:5080/health"
+        echo "  本地: curl http://127.0.0.1:3000/health"
         [[ -n "${API_DOMAIN:-}" ]] && echo "  公网: curl https://${API_DOMAIN}/health"
         echo ""
         exit 0
@@ -105,7 +104,7 @@ main() {
     echo ""
     err "API 未就绪，见上方诊断。修复建议："
     echo "  1. 重新安装: sudo bash install.sh"
-    echo "  2. 查看日志: docker compose -f docker-compose.prod.yml logs api"
+    echo "  2. 查看日志: docker compose logs app"
     exit 1
 }
 

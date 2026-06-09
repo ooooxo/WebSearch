@@ -3,7 +3,7 @@
 
 wait_for_api_ready() {
     local max_wait="${1:-120}"   # 最多等待秒数
-    local port="${2:-5080}"
+    local port="${2:-3000}"
     local elapsed=0
 
     info "等待 API 就绪（最多 ${max_wait}s）..."
@@ -47,16 +47,16 @@ wait_for_api_ready() {
 }
 
 _diagnose_api() {
-    local port="${1:-5080}"
+    local port="${1:-3000}"
 
     echo ""
     info "=== 容器状态 ==="
-    compose_ps 2>/dev/null || docker compose -f docker-compose.prod.yml ps 2>/dev/null || true
+    compose_ps 2>/dev/null || docker compose ps 2>/dev/null || true
 
     echo ""
     info "=== API 日志（最后 60 行）==="
     compose_logs api --tail 60 2>/dev/null \
-        || docker compose -f docker-compose.prod.yml logs api --tail 60 2>/dev/null \
+        || docker compose logs api --tail 60 2>/dev/null \
         || true
 
     echo ""

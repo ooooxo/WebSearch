@@ -28,7 +28,7 @@ NGINX_SITE_NAME="websearch"
 CACHE_SEARCH_TTL="7200"
 CACHE_SCRAPE_TTL="86400"
 FIRECRAWL_API_KEY=""
-JINA_API_KEY=""
+TAVILY_API_KEY=""
 
 # ===========================
 # Redis 连接测试（通过临时 Docker 容器）
@@ -234,8 +234,8 @@ configure_misc() {
     ok "SearXNG 密钥已设置"
 
     echo ""
-    read -r -p "  Firecrawl API Key（可选，回车跳过）: " FIRECRAWL_API_KEY
-    read -r -p "  Jina API Key（可选，回车跳过）: "      JINA_API_KEY
+    read -r -p "  Firecrawl API Key（可选，抓取兜底，回车跳过）: " FIRECRAWL_API_KEY
+    read -r -p "  Tavily API Key（可选，搜索兜底，回车跳过）:    " TAVILY_API_KEY
     prompt CACHE_SEARCH_TTL "  搜索缓存 TTL（秒）" "7200"
     prompt CACHE_SCRAPE_TTL "  抓取缓存 TTL（秒）" "86400"
 }
@@ -293,10 +293,9 @@ sync_searxng_key() {
 cleanup_old_env() {
     step "清理旧环境"
     info "停止并移除旧容器..."
-    compose_down --volumes 2>/dev/null || docker compose -f docker-compose.prod.yml down --volumes 2>/dev/null || true
+    compose_down --volumes 2>/dev/null || docker compose down --volumes 2>/dev/null || true
     info "清理旧镜像..."
-    docker image rm websearch-api:latest websearch-crawl4ai:latest 2>/dev/null || true
-    rm -f docker-compose.prod.override.yml 2>/dev/null || true
+    docker image rm websearch-api:latest websearch-crawl-svc:latest 2>/dev/null || true
     ok "旧环境清理完成（.env 保留，外部 Redis/PostgreSQL 未动）"
 }
 
@@ -319,7 +318,7 @@ deploy_nginx() {
     export NGINX_DOMAIN="${API_DOMAIN}"
     export CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
     export NGINX_BACKEND_HOST="127.0.0.1"
-    export NGINX_BACKEND_PORT="5080"
+    export NGINX_BACKEND_PORT="3000"
     export NGINX_SITE_NAME="${NGINX_SITE_NAME:-websearch}"
     export ENABLE_HTTPS="y"
     export DEPLOY_FROM_SETUP=1
@@ -341,10 +340,11 @@ print_summary() {
         echo "  API:      https://${API_DOMAIN}"
         echo "  健康检查: curl https://${API_DOMAIN}/health"
     fi
-    echo "  本地检查: curl http://127.0.0.1:5080/health"
+    echo "  本地检查: curl http://127.0.0.1:3000/health"
+    echo "  MCP SSE:  http://127.0.0.1:3000/mcp"
     echo ""
     echo "  一键修复: sudo bash fix.sh"
-    echo "  看日志:   docker compose -f docker-compose.prod.yml logs -f api"
+    echo "  看日志:   docker compose logs -f app"
     echo ""
 }
 
@@ -369,7 +369,7 @@ main() {
             CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
             cleanup_old_env
             deploy_docker
-            wait_for_api_ready 120 5080 || warn "API 暂未就绪，见上方诊断"
+            wait_for_api_ready 120 3000 || warn "API 暂未就绪，见上方诊断"
             deploy_nginx
             print_summary
             return
@@ -388,7 +388,7 @@ main() {
     cleanup_old_env
     deploy_docker
 
-    wait_for_api_ready 120 5080 || warn "API 暂未就绪，见上方诊断"
+    wait_for_api_ready 120 3000 || warn "API 暂未就绪，见上方诊断"
     deploy_nginx
     print_summary
 }

@@ -9,10 +9,25 @@ search:
   autocomplete: ""
   default_lang: "en"
   formats:
-    - html
     - json
 
 server:
-  secret_key: "websearch-dev-secret-change-in-production"
-  limiter: false
+  # 由 docker-compose 通过 SEARXNG_SECRET_KEY 环境变量注入
+  secret_key: "${SEARXNG_SECRET_KEY}"
+  limiter: false      # 内网调用，关闭限速
   image_proxy: false
+  method: GET
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    weight: 2
+  - name: bing
+    engine: bing
+    shortcut: b
+    weight: 1.5
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    weight: 1

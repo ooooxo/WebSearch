@@ -15,10 +15,9 @@ public static class DependencyInjection
     public static IServiceCollection AddWebSearchApplication(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<SearXngOptions>(configuration.GetSection(SearXngOptions.SectionName));
-        services.Configure<Crawl4AiOptions>(configuration.GetSection(Crawl4AiOptions.SectionName));
+        services.Configure<CrawlSvcOptions>(configuration.GetSection(CrawlSvcOptions.SectionName));
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
         services.Configure<FirecrawlOptions>(configuration.GetSection(FirecrawlOptions.SectionName));
-        services.Configure<JinaOptions>(configuration.GetSection(JinaOptions.SectionName));
 
         var redisConnection = configuration["Redis:Connection"] ?? "localhost:6379,abortConnect=false";
         if (!redisConnection.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
@@ -36,9 +35,9 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        services.AddHttpClient("crawl4ai", (sp, client) =>
+        services.AddHttpClient("crawl-svc", (sp, client) =>
         {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Crawl4AiOptions>>().Value;
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CrawlSvcOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromMinutes(2);
         });
@@ -49,18 +48,6 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
             client.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.ApiKey);
-            client.Timeout = TimeSpan.FromMinutes(2);
-        });
-
-        services.AddHttpClient("jina", (sp, client) =>
-        {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<JinaOptions>>().Value;
-            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-            if (!string.IsNullOrWhiteSpace(options.ApiKey))
-            {
-                client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.ApiKey);
-            }
             client.Timeout = TimeSpan.FromMinutes(2);
         });
 
@@ -78,9 +65,9 @@ public static class DependencyInjection
 
         services.AddScoped<ISearchService, SearchService>();
         services.AddScoped<ISearchDeepService, SearchDeepService>();
-        services.AddScoped<IScrapeProvider, Crawl4AiScrapeProvider>();
+        // Scrape provider chain: crawl-svc (free, local) → Firecrawl (paid fallback)
+        services.AddScoped<IScrapeProvider, CrawlSvcScrapeProvider>();
         services.AddScoped<IScrapeProvider, FirecrawlScrapeProvider>();
-        services.AddScoped<IScrapeProvider, JinaScrapeProvider>();
         services.AddScoped<IScrapeService, ScrapeService>();
 
         return services;

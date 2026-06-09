@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using ModelContextProtocol.Server;
 using WebSearch.Api.Endpoints;
 using WebSearch.Api.Extensions;
 using WebSearch.Application;
@@ -8,6 +9,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddWebSearchApplication(builder.Configuration);
 builder.Services.AddOpenApi();
+
+// MCP Server — HTTP/SSE transport (remote clients use /mcp endpoint)
+builder.Services
+    .AddMcpServer()
+    .WithHttpTransport()
+    .WithToolsFromAssembly();
 
 var includeDependencyHealthChecks =
     builder.Configuration.GetValue("HealthChecks:IncludeDependencies", true);
@@ -37,18 +44,21 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-// 存活探针：仅进程是否启动（Nginx / 部署脚本用，不检查 Redis/PG）
+// 存活探针
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = check => check.Name == "self",
 });
 
-// 就绪探针：含 Redis + PostgreSQL
+// 就绪探针（含 Redis + PostgreSQL）
 app.MapHealthChecks("/health");
 
 app.MapSearchEndpoints();
 app.MapSearchDeepEndpoints();
 app.MapScrapeEndpoints();
+
+// MCP SSE endpoint — Claude Desktop / Cursor 远程连接用
+app.MapMcp("/mcp");
 
 await app.ApplyDatabaseMigrationsAsync();
 app.Run();

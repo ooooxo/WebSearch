@@ -16,17 +16,9 @@ cleanup_before_install() {
         site="${NGINX_SITE_NAME:-websearch}"
     fi
 
-    if [[ -f "${PROJECT_ROOT}/docker-compose.prod.yml" ]]; then
+    if [[ -f "${PROJECT_ROOT}/docker-compose.yml" ]]; then
         info "停止并移除 Docker 容器与数据卷..."
-        # 尽可能覆盖所有 profile 组合，确保干净重装
-        docker compose -f "${PROJECT_ROOT}/docker-compose.prod.yml" \
-            --profile builtin-redis --profile builtin-postgres \
-            down -v --remove-orphans 2>/dev/null || true
-        docker compose -f "${PROJECT_ROOT}/docker-compose.prod.yml" \
-            --profile builtin-redis down -v --remove-orphans 2>/dev/null || true
-        docker compose -f "${PROJECT_ROOT}/docker-compose.prod.yml" \
-            --profile builtin-postgres down -v --remove-orphans 2>/dev/null || true
-        docker compose -f "${PROJECT_ROOT}/docker-compose.prod.yml" \
+        docker compose -f "${PROJECT_ROOT}/docker-compose.yml" \
             down -v --remove-orphans 2>/dev/null || true
         ok "Docker 容器已清理"
     fi
@@ -43,7 +35,7 @@ cleanup_before_install() {
     if command -v docker >/dev/null 2>&1; then
         info "清理旧镜像..."
         docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
-            | grep_safe -E '(^websearch-|^websearch/)|crawl4ai' \
+            | grep_safe -E '^websearch-|^websearch/' \
             | xargs -r docker rmi -f 2>/dev/null || true
     fi
 

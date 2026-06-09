@@ -59,9 +59,28 @@ _write_proxy_location() {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Connection "";
 
-        proxy_connect_timeout 60s;
+        proxy_connect_timeout 10s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
+EOF
+}
+
+_write_mcp_location() {
+    cat <<'EOF'
+        proxy_pass http://websearch_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        # SSE 必须禁缓冲
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding on;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 3600s;
+        proxy_read_timeout 3600s;
 EOF
 }
 
@@ -86,12 +105,23 @@ upstream websearch_api {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
+    http2 on;
     server_name ${domain};
 
     ssl_certificate     /etc/letsencrypt/live/${domain}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
 $( [[ -f /etc/letsencrypt/options-ssl-nginx.conf ]] && echo "    include /etc/letsencrypt/options-ssl-nginx.conf;" )
 $( [[ -f /etc/letsencrypt/ssl-dhparams.pem ]] && echo "    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;" )
+
+    # MCP SSE 端点 — 禁缓冲，超时放宽至 1h
+    location /mcp {
+$(_write_mcp_location | sed 's/^/        /')
+    }
+
+    location /health {
+$(_write_proxy_location | sed 's/^/        /')
+        access_log off;
+    }
 
     location / {
 $(_write_proxy_location | sed 's/^/        /')
@@ -120,6 +150,16 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${domain};
+
+    # MCP SSE 端点 — 禁缓冲
+    location /mcp {
+$(_write_mcp_location | sed 's/^/        /')
+    }
+
+    location /health {
+$(_write_proxy_location | sed 's/^/        /')
+        access_log off;
+    }
 
     location / {
 $(_write_proxy_location | sed 's/^/        /')
@@ -188,7 +228,7 @@ main() {
     if [[ -n "${NGINX_DOMAIN:-}" ]]; then
         DOMAIN="${NGINX_DOMAIN}"
         BACKEND_HOST="${NGINX_BACKEND_HOST:-127.0.0.1}"
-        BACKEND_PORT="${NGINX_BACKEND_PORT:-5080}"
+        BACKEND_PORT="${NGINX_BACKEND_PORT:-3000}"
         SITE_NAME="${NGINX_SITE_NAME:-websearch}"
         CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
         ENABLE_HTTPS="${ENABLE_HTTPS:-y}"
@@ -197,7 +237,7 @@ main() {
         echo ""
         prompt DOMAIN "API 域名" ""
         prompt BACKEND_HOST "后端地址" "127.0.0.1"
-        prompt BACKEND_PORT "后端端口" "5080"
+        prompt BACKEND_PORT "后端端口" "3000"
         prompt SITE_NAME "Nginx 站点文件名" "websearch"
         ENABLE_HTTPS="n"
         CERTBOT_EMAIL=""

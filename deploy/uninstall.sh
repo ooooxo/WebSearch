@@ -71,12 +71,10 @@ if [[ "${PURGE_VOLUMES}" == "true" && "${REMOVE_NGINX}" == "true" && "${PRUNE_IM
     cleanup_before_install
 else
     step "自定义卸载"
-    if [[ -f docker-compose.prod.yml ]]; then
+    if [[ -f docker-compose.yml ]]; then
         local_args=(down --remove-orphans)
         [[ "${PURGE_VOLUMES}" == "true" ]] && local_args+=(-v)
-        docker compose -f docker-compose.prod.yml --profile builtin-redis --profile builtin-postgres \
-            "${local_args[@]}" 2>/dev/null || true
-        docker compose -f docker-compose.prod.yml "${local_args[@]}" 2>/dev/null || true
+        docker compose -f docker-compose.yml "${local_args[@]}" 2>/dev/null || true
     fi
     if [[ "${REMOVE_NGINX}" == "true" ]]; then
         site="${NGINX_SITE_NAME:-websearch}"
@@ -86,7 +84,7 @@ else
     fi
     if [[ "${PRUNE_IMAGES}" == "true" ]]; then
         docker images --format '{{.Repository}}:{{.Tag}}' \
-            | grep_safe -E '(^websearch-|^websearch/)|crawl4ai' \
+            | grep_safe -E '^websearch-|^websearch/' \
             | xargs -r docker rmi -f 2>/dev/null || true
     fi
 fi
