@@ -2,7 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/WebSearch.Api/WebSearch.Api.csproj" />
     <Project Path="src/WebSearch.Application/WebSearch.Application.csproj" />
-    <Project Path="src/WebSearch.Mcp/WebSearch.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WebSearch.Api.Tests/WebSearch.Api.Tests.csproj" />

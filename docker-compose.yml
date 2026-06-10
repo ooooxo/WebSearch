@@ -1,6 +1,7 @@
 # WebSearch — production docker-compose
-# 所有容器共享 app-net 内网，仅 app 对外暴露端口 3000
-# 用法: cp .env.example .env && bash deploy.sh
+# app 使用 host 网络，crawl-svc / searxng 使用 bridge 网络并绑定到 127.0.0.1
+# redis / postgres 通过 profile 控制：builtin-redis / builtin-postgres
+# 用法: cp .env.example .env && bash install.sh
 
 networks:
   app-net:
@@ -12,68 +13,66 @@ volumes:
 
 services:
 
-  # ── 主服务：C# API + MCP SSE ─────────────────────────────────────────
+  # ── 主服务：C# REST API ──────────────────────────────────────────────────
   app:
     build:
       context: .
       dockerfile: src/WebSearch.Api/Dockerfile
     restart: unless-stopped
-    ports:
-      - "${APP_PORT:-18900}:8080"
+    network_mode: host
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_URLS: "http://+:${APP_PORT:-18900}"
       Database__ApplyMigrationsOnStartup: "true"
       HealthChecks__IncludeDependencies: "true"
-      Redis__Connection: "redis:6379,abortConnect=false"
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=websearch;Username=websearch;Password=${POSTGRES_PASSWORD}"
-      SearXng__BaseUrl: "http://searxng:8080"
-      CrawlSvc__BaseUrl: "http://crawl-svc:8001"
+      Redis__Connection: "${REDIS_CONNECTION:-localhost:6379,abortConnect=false}"
+      ConnectionStrings__Postgres: "${POSTGRES_CONNECTION:-}"
+      SearXng__BaseUrl: "http://localhost:8080"
+      CrawlSvc__BaseUrl: "http://localhost:8001"
       Firecrawl__ApiKey: "${FIRECRAWL_API_KEY:-}"
       Firecrawl__BaseUrl: "https://api.firecrawl.dev"
+      Tavily__ApiKey: "${TAVILY_API_KEY:-}"
       Cache__SearchTtlSeconds: "${CACHE_SEARCH_TTL:-7200}"
       Cache__ScrapeTtlSeconds: "${CACHE_SCRAPE_TTL:-86400}"
-      Tavily__ApiKey: "${TAVILY_API_KEY:-}"
+      SCRAPE_MAX_CHARS: "${SCRAPE_MAX_CHARS:-8000}"
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
       searxng:
         condition: service_started
       crawl-svc:
         condition: service_healthy
-    networks:
-      - app-net
 
-  # ── 抓取服务：httpx + Playwright + trafilatura ───────────────────────
+  # ── 抓取服务：httpx + trafilatura ────────────────────────────────────────
   crawl-svc:
     build: ./services/crawl-svc
     restart: unless-stopped
-    shm_size: "2gb"    # Chromium 需要足够的共享内存，官方推荐 ≥ 2gb
+    ports:
+      - "127.0.0.1:8001:8001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 20s
     networks:
       - app-net
 
-  # ── 搜索引擎：SearXNG ────────────────────────────────────────────────
+  # ── 搜索引擎：SearXNG ────────────────────────────────────────────────────
   searxng:
     image: searxng/searxng:latest
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./deploy/searxng:/etc/searxng:rw
     environment:
-      SEARXNG_BASE_URL: "http://localhost:3000/"
-      SEARXNG_SECRET_KEY: "${SEARXNG_SECRET}"
+      SEARXNG_BASE_URL: "http://localhost:${APP_PORT:-18900}/"
+      SEARXNG_SECRET_KEY: "${SEARXNG_SECRET_KEY:-change-me}"
     networks:
       - app-net
 
-  # ── 缓存：Redis ──────────────────────────────────────────────────────
+  # ── 缓存：Redis（内置，按需启用）────────────────────────────────────────
   redis:
+    profiles: [builtin-redis]
     image: redis:7-alpine
     restart: unless-stopped
     command: >
@@ -81,6 +80,8 @@ services:
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
       --save ""
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -88,17 +89,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - app-net
 
-  # ── 日志库：PostgreSQL ───────────────────────────────────────────────
+  # ── 日志库：PostgreSQL（内置，按需启用）──────────────────────────────────
   postgres:
+    profiles: [builtin-postgres]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: websearch
       POSTGRES_USER: websearch
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -106,5 +108,3 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - app-net

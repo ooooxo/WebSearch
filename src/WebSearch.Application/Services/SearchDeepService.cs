@@ -37,8 +37,9 @@ public sealed class SearchDeepService(
         if (cached is not null)
         {
             sw.Stop();
-            await requestLog.LogAsync(
-                "search/deep", normalizedQuery, "searxng+crawl", sw.ElapsedMilliseconds, true, cancellationToken);
+            await requestLog.LogSearchAsync(
+                request.Query, normalizedQuery, "searxng+crawl",
+                cached.Results.Count, sw.ElapsedMilliseconds, true, cancellationToken);
             return new SearchDeepResponse(
                 normalizedQuery, cached.Results, true, cached.ScrapedCount, minScore);
         }
@@ -71,59 +72,29 @@ public sealed class SearchDeepService(
                 }
 
                 enriched.Add(new SearchResultEnrichedItem(
-                    item.Title,
-                    item.Url,
-                    item.Snippet,
-                    item.Engine,
-                    item.Score,
-                    item.Engines,
-                    scrape.Content,
-                    scrape.Source,
-                    scrape.Success,
-                    scrape.CacheHit,
-                    true));
+                    item.Title, item.Url, item.Snippet, item.Engine, item.Score, item.Engines,
+                    scrape.Content, scrape.Source, scrape.Success, scrape.CacheHit, true));
             }
             else
             {
                 enriched.Add(new SearchResultEnrichedItem(
-                    item.Title,
-                    item.Url,
-                    item.Snippet,
-                    item.Engine,
-                    item.Score,
-                    item.Engines,
-                    null,
-                    null,
-                    false,
-                    false,
-                    false));
+                    item.Title, item.Url, item.Snippet, item.Engine, item.Score, item.Engines,
+                    null, null, false, false, false));
             }
         }
 
         var ttl = TimeSpan.FromSeconds(cacheOptions.Value.SearchTtlSeconds);
-        await cache.SetAsync(
-            cacheKey,
-            new CachedSearchDeepPayload(enriched, scrapedCount),
-            ttl,
-            cancellationToken);
+        await cache.SetAsync(cacheKey, new CachedSearchDeepPayload(enriched, scrapedCount), ttl, cancellationToken);
 
         sw.Stop();
-        await requestLog.LogAsync(
-            "search/deep", normalizedQuery, "searxng+crawl", sw.ElapsedMilliseconds, false, cancellationToken);
+        await requestLog.LogSearchAsync(
+            request.Query, normalizedQuery, "searxng+crawl",
+            enriched.Count, sw.ElapsedMilliseconds, false, cancellationToken);
         logger.LogInformation(
             "Deep search for {Query}: {ResultCount} results, {ScrapeTargets} scrape targets, {ScrapedCount} scraped in {Ms}ms",
-            normalizedQuery,
-            enriched.Count,
-            scrapeTargets.Count,
-            scrapedCount,
-            sw.ElapsedMilliseconds);
+            normalizedQuery, enriched.Count, scrapeTargets.Count, scrapedCount, sw.ElapsedMilliseconds);
 
-        return new SearchDeepResponse(
-            normalizedQuery,
-            enriched,
-            search.CacheHit,
-            scrapedCount,
-            minScore);
+        return new SearchDeepResponse(normalizedQuery, enriched, search.CacheHit, scrapedCount, minScore);
     }
 
     private sealed record CachedSearchDeepPayload(

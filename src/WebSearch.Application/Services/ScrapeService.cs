@@ -14,6 +14,9 @@ public sealed class ScrapeService(
     IOptions<CacheOptions> cacheOptions,
     ILogger<ScrapeService> logger) : IScrapeService
 {
+    private static readonly int MaxContentChars =
+        int.TryParse(Environment.GetEnvironmentVariable("SCRAPE_MAX_CHARS"), out var v) && v > 0 ? v : 8000;
+
     private readonly IReadOnlyList<IScrapeProvider> _providers = providers.ToList();
 
     public async Task<ScrapeResponse> ScrapeAsync(ScrapeRequest request, CancellationToken cancellationToken = default)
@@ -25,7 +28,8 @@ public sealed class ScrapeService(
         if (cached is not null)
         {
             sw.Stop();
-            await requestLog.LogAsync("scrape", canonicalUrl, cached.Source, sw.ElapsedMilliseconds, true, cancellationToken);
+            await requestLog.LogScrapeAsync(canonicalUrl, cached.Source, cached.Content is not null,
+                cached.Content?.Length ?? 0, sw.ElapsedMilliseconds, true, cancellationToken);
             return new ScrapeResponse(cached.Content, cached.Source, true, cached.Content is not null);
         }
 
@@ -54,6 +58,11 @@ public sealed class ScrapeService(
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(content) && content.Length > MaxContentChars)
+        {
+            content = content[..MaxContentChars];
+        }
+
         var success = !string.IsNullOrWhiteSpace(content);
         if (success && source is not null)
         {
@@ -62,12 +71,11 @@ public sealed class ScrapeService(
         }
 
         sw.Stop();
-        await requestLog.LogAsync("scrape", canonicalUrl, source, sw.ElapsedMilliseconds, false, cancellationToken);
+        await requestLog.LogScrapeAsync(canonicalUrl, source ?? "none", success,
+            content?.Length ?? 0, sw.ElapsedMilliseconds, false, cancellationToken);
         logger.LogInformation(
             "Scrape completed for {Url} via {Source} in {Ms}ms",
-            canonicalUrl,
-            source ?? "none",
-            sw.ElapsedMilliseconds);
+            canonicalUrl, source ?? "none", sw.ElapsedMilliseconds);
 
         return new ScrapeResponse(content, source ?? "none", false, success);
     }

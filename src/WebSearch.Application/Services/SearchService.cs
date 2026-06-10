@@ -14,6 +14,7 @@ public sealed class SearchService(
     ICacheService cache,
     IRequestLogService requestLog,
     IOptions<CacheOptions> cacheOptions,
+    IOptions<TavilyOptions> tavilyOptions,
     ILogger<SearchService> logger) : ISearchService
 {
     public async Task<SearchResponse> SearchAsync(SearchRequest request, CancellationToken cancellationToken = default)
@@ -31,10 +32,45 @@ public sealed class SearchService(
         if (cached is not null)
         {
             sw.Stop();
-            await requestLog.LogAsync("search", normalizedQuery, "searxng", sw.ElapsedMilliseconds, true, cancellationToken);
-            return new SearchResponse(cached.Results, true);
+            await requestLog.LogSearchAsync(request.Query, normalizedQuery, cached.Source,
+                cached.Results.Count, sw.ElapsedMilliseconds, true, cancellationToken);
+            return new SearchResponse(cached.Results, true, cached.Source);
         }
 
+        var results = await FetchSearXngAsync(normalizedQuery, maxResults, cancellationToken);
+        var source = "searxng";
+
+        var tavily = tavilyOptions.Value;
+        var avgScore = results.Count > 0 ? results.Average(r => r.Score) : 0f;
+        if (tavily.IsConfigured && (results.Count < tavily.MinResultCount || avgScore < tavily.MinAverageScore))
+        {
+            var tavilyResults = await FetchTavilyAsync(normalizedQuery, maxResults, cancellationToken);
+            if (tavilyResults.Count > 0)
+            {
+                var existingUrls = results.Select(r => r.Url).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var newItems = tavilyResults.Where(r => !existingUrls.Contains(r.Url));
+                results = results.Concat(newItems)
+                    .OrderByDescending(r => r.Score)
+                    .Take(maxResults)
+                    .ToList();
+                source = "searxng+tavily";
+            }
+        }
+
+        var ttl = TimeSpan.FromSeconds(cacheOptions.Value.SearchTtlSeconds);
+        await cache.SetAsync(cacheKey, new CachedSearchPayload(results, source), ttl, cancellationToken);
+
+        sw.Stop();
+        await requestLog.LogSearchAsync(request.Query, normalizedQuery, source,
+            results.Count, sw.ElapsedMilliseconds, false, cancellationToken);
+        logger.LogInformation("Search completed for {Query} via {Source} in {Ms}ms", normalizedQuery, source, sw.ElapsedMilliseconds);
+
+        return new SearchResponse(results, false, source);
+    }
+
+    private async Task<List<SearchResultItem>> FetchSearXngAsync(
+        string normalizedQuery, int maxResults, CancellationToken cancellationToken)
+    {
         var client = httpClientFactory.CreateClient("searxng");
         var response = await client.GetAsync(
             $"/search?q={Uri.EscapeDataString(normalizedQuery)}&format=json",
@@ -56,7 +92,7 @@ public sealed class SearchService(
         });
 
         var merged = SearchResultMerger.Merge(raw, maxResults);
-        var results = merged
+        return merged
             .Select(m => new
             {
                 Merged = m,
@@ -79,18 +115,50 @@ public sealed class SearchService(
                 x.Score,
                 x.Merged.Engines))
             .ToList();
-
-        var ttl = TimeSpan.FromSeconds(cacheOptions.Value.SearchTtlSeconds);
-        await cache.SetAsync(cacheKey, new CachedSearchPayload(results), ttl, cancellationToken);
-
-        sw.Stop();
-        await requestLog.LogAsync("search", normalizedQuery, "searxng", sw.ElapsedMilliseconds, false, cancellationToken);
-        logger.LogInformation("Search completed for {Query} in {Ms}ms", normalizedQuery, sw.ElapsedMilliseconds);
-
-        return new SearchResponse(results, false);
     }
 
-    private sealed record CachedSearchPayload(IReadOnlyList<SearchResultItem> Results);
+    private async Task<List<SearchResultItem>> FetchTavilyAsync(
+        string query, int maxResults, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient("tavily");
+            var response = await client.PostAsJsonAsync("search", new
+            {
+                query,
+                max_results = Math.Min(maxResults, 10),
+            }, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return [];
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<TavilyResponse>(cancellationToken);
+            if (payload?.Results is null)
+            {
+                return [];
+            }
+
+            return payload.Results
+                .Select(r => new SearchResultItem(
+                    r.Title ?? string.Empty,
+                    r.Url ?? string.Empty,
+                    r.Content,
+                    "tavily",
+                    (float)(r.Score ?? 0.5),
+                    ["tavily"]))
+                .Where(r => !string.IsNullOrWhiteSpace(r.Url))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Tavily search failed for {Query}", query);
+            return [];
+        }
+    }
+
+    private sealed record CachedSearchPayload(IReadOnlyList<SearchResultItem> Results, string Source);
 
     private sealed class SearXngResponse
     {
@@ -120,5 +188,26 @@ public sealed class SearchService(
 
         [JsonPropertyName("position")]
         public int? Position { get; set; }
+    }
+
+    private sealed class TavilyResponse
+    {
+        [JsonPropertyName("results")]
+        public List<TavilyResult>? Results { get; set; }
+    }
+
+    private sealed class TavilyResult
+    {
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("url")]
+        public string? Url { get; set; }
+
+        [JsonPropertyName("content")]
+        public string? Content { get; set; }
+
+        [JsonPropertyName("score")]
+        public double? Score { get; set; }
     }
 }

@@ -18,6 +18,7 @@ write_env_file() {
     local env_file="${1:-${PROJECT_ROOT:-$(pwd)}/.env}"
     {
         printf '# WebSearch 配置 — %s\n\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        printf 'APP_PORT=%s\n'              "${APP_PORT:-18900}"
         printf 'USE_BUILTIN_REDIS=%s\n'      "${USE_BUILTIN_REDIS:-false}"
         printf 'USE_BUILTIN_POSTGRES=%s\n'   "${USE_BUILTIN_POSTGRES:-false}"
         printf 'REDIS_CONNECTION="%s"\n'     "${REDIS_CONNECTION:-localhost:6379,abortConnect=false}"
@@ -25,7 +26,7 @@ write_env_file() {
         printf 'POSTGRES_PASSWORD="%s"\n'    "${POSTGRES_PASSWORD}"
         printf 'SEARXNG_SECRET_KEY="%s"\n'   "${SEARXNG_SECRET_KEY}"
         printf 'FIRECRAWL_API_KEY="%s"\n'    "${FIRECRAWL_API_KEY:-}"
-        printf 'JINA_API_KEY="%s"\n'         "${JINA_API_KEY:-}"
+        printf 'TAVILY_API_KEY="%s"\n'       "${TAVILY_API_KEY:-}"
         printf 'CACHE_SEARCH_TTL=%s\n'       "${CACHE_SEARCH_TTL:-7200}"
         printf 'CACHE_SCRAPE_TTL=%s\n'       "${CACHE_SCRAPE_TTL:-86400}"
         printf 'API_DOMAIN=%s\n'             "${API_DOMAIN:-}"

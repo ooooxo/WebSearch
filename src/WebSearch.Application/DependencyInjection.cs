@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.Configure<CrawlSvcOptions>(configuration.GetSection(CrawlSvcOptions.SectionName));
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
         services.Configure<FirecrawlOptions>(configuration.GetSection(FirecrawlOptions.SectionName));
+        services.Configure<TavilyOptions>(configuration.GetSection(TavilyOptions.SectionName));
 
         var redisConnection = configuration["Redis:Connection"] ?? "localhost:6379,abortConnect=false";
         if (!redisConnection.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
@@ -49,6 +50,15 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.ApiKey);
             client.Timeout = TimeSpan.FromMinutes(2);
+        });
+
+        services.AddHttpClient("tavily", (sp, client) =>
+        {
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TavilyOptions>>().Value;
+            client.BaseAddress = new Uri("https://api.tavily.com/");
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.ApiKey);
+            client.Timeout = TimeSpan.FromSeconds(30);
         });
 
         var postgresConnection = configuration.GetConnectionString("Postgres");

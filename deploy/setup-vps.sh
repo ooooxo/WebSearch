@@ -341,7 +341,6 @@ print_summary() {
         echo "  健康检查: curl https://${API_DOMAIN}/health"
     fi
     echo "  本地检查: curl http://127.0.0.1:18900/health"
-    echo "  MCP SSE:  http://127.0.0.1:18900/mcp"
     echo ""
     echo "  一键修复: sudo bash fix.sh"
     echo "  看日志:   docker compose logs -f app"
